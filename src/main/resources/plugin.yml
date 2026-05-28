@@ -81,6 +81,10 @@ commands:
     description: Rush-winkel — perks voor PointRush met Rush-tegoed.
     usage: /shop
     aliases: [ prshop, coinshop ]
+  live:
+    description: Zet je live stream op de PointRush website (streamers).
+    usage: /live <twitch|youtube|tiktok> <link>
+    aliases: [ stream, golive ]
 
 permissions:
   pointrush.team.use:
@@ -179,6 +183,9 @@ permissions:
   pointrush.shop.use:
     description: Toegang tot /shop (Rush-winkel GUI).
     default: true
+  pointrush.streamer:
+    description: Mag /live gebruiken om op de website te verschijnen als streamer.
+    default: op
   pointrush.admin:
     description: Volledige PointRush admin rechten.
     default: op
@@ -215,3 +222,4 @@ permissions:
       pointrush.coins.use: true
       pointrush.coins.admin: true
       pointrush.shop.use: true
+      pointrush.streamer: true

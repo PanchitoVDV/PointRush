@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import McPanel from '../components/McPanel';
+import LiveNowBanner from '../components/LiveNowBanner';
 import { EventCard, HeroTopPlayers, LoadingScreen, StatBlock, TeamBadge } from '../components/Ui';
 import { formatPoints, playerHead, teamAccent, teamColor } from '../utils';
 
@@ -28,6 +29,7 @@ export default function HomePage() {
           <div className="hero__actions">
             <Link to="/teams" className="btn btn--primary">Team ranking</Link>
             <Link to="/players" className="btn btn--ghost">Speler ranking</Link>
+            <Link to="/live" className="btn btn--ghost">Live</Link>
             <Link to="/events" className="btn btn--ghost">Events</Link>
           </div>
         </div>
@@ -35,6 +37,8 @@ export default function HomePage() {
           <HeroTopPlayers players={data.topPlayers} />
         </div>
       </section>
+
+      <LiveNowBanner />
 
       <div className="stats-grid">
         <StatBlock icon="🎮" label="Events gespeeld" value={formatPoints(data.totalEvents)} highlight />

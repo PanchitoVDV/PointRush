@@ -19,5 +19,6 @@ export const api = {
   event: (id) => fetchJson(`/events/${id}`),
   players: (limit = 50) => fetchJson(`/players?limit=${limit}`),
   player: (uuid) => fetchJson(`/players/${uuid}`),
+  live: () => fetchJson('/live'),
   meta: () => fetchJson('/meta'),
 };

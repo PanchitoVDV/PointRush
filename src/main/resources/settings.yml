@@ -9,6 +9,8 @@ mongodb:
   player-coins-collection: player_coins
   # Event history voor de stats website (gesynchroniseerd vanuit events.yml).
   events-collection: events
+  # Actieve streamer links voor de website (/live command).
+  live-streams-collection: live_streams
 
 cache:
   leaderboard-cache-enabled: true

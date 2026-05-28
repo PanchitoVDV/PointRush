@@ -7,6 +7,7 @@ import {
   formatEvent,
   formatTeam,
 } from '../services/stats.js';
+import { demoLiveStreams, formatLiveStream } from '../services/live.js';
 
 const router = Router();
 
@@ -144,6 +145,27 @@ router.get('/players/:uuid', async (req, res) => {
     res.json({ player, recentEvents: events.slice(0, 20), coins, demo: false });
   } catch {
     res.status(500).json({ error: 'Kon speler niet laden' });
+  }
+});
+
+router.get('/live', async (_req, res) => {
+  const db = await getDb();
+  if (!db) {
+    const streams = demoLiveStreams();
+    return res.json({ streams, count: streams.length, demo: true });
+  }
+
+  try {
+    const docs = await db
+      .collection(collections().liveStreams)
+      .find({ active: true })
+      .sort({ startedAt: -1 })
+      .toArray();
+    const streams = docs.map(formatLiveStream).filter((s) => s.url);
+    res.json({ streams, count: streams.length, demo: false });
+  } catch {
+    const streams = demoLiveStreams();
+    res.json({ streams, count: streams.length, demo: true });
   }
 });
 

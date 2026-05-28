@@ -36,6 +36,7 @@ export function collections() {
     teams: process.env.MONGODB_TEAMS_COLLECTION ?? 'teams',
     events: process.env.MONGODB_EVENTS_COLLECTION ?? 'events',
     playerCoins: process.env.MONGODB_PLAYER_COINS_COLLECTION ?? 'player_coins',
+    liveStreams: process.env.MONGODB_LIVE_STREAMS_COLLECTION ?? 'live_streams',
   };
 }
 

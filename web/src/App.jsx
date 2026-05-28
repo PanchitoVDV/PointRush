@@ -7,6 +7,7 @@ import EventsPage from './pages/EventsPage';
 import EventDetailPage from './pages/EventDetailPage';
 import PlayersPage from './pages/PlayersPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
+import LivePage from './pages/LivePage';
 import { api } from './api/client';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout demo={demo} />}>
         <Route index element={<HomePage />} />
+        <Route path="live" element={<LivePage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="events" element={<EventsPage />} />
         <Route path="events/:id" element={<EventDetailPage />} />
