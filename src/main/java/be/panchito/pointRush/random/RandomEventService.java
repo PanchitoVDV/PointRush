@@ -200,7 +200,7 @@ public final class RandomEventService {
     private void runWheelAnimation(List<MinigameRegistry.RandomCandidate> eligible,
                                    MinigameRegistry.RandomCandidate winner,
                                    CommandSender initiator) {
-        int extraSpins = 18 + ThreadLocalRandom.current().nextInt(8);
+        int extraSpins = 42 + ThreadLocalRandom.current().nextInt(14);
         MinigameRegistry.RandomCandidate[] sequence = new MinigameRegistry.RandomCandidate[extraSpins + 1];
         List<String> sequenceIds = new ArrayList<>(extraSpins + 1);
         for (int i = 0; i < extraSpins; i++) {
@@ -274,7 +274,7 @@ public final class RandomEventService {
                     .build());
         }
 
-        long delayTicks = remaining > 8 ? 2L : remaining > 3 ? 5L : remaining > 1 ? 10L : 18L;
+        long delayTicks = remaining > 14 ? 3L : remaining > 8 ? 6L : remaining > 3 ? 12L : remaining > 1 ? 18L : 28L;
         spinTask = Bukkit.getScheduler().runTaskLater(plugin, () ->
                 scheduleWheelStep(sequence, step + 1, winner, initiator), delayTicks);
     }

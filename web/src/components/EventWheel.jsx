@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const TICK_MS = 50;
-const FULL_TURNS = 5;
+const FULL_TURNS = 8;
 
 function stepDelayTicks(remaining) {
-  if (remaining > 8) return 2;
-  if (remaining > 3) return 5;
-  if (remaining > 1) return 10;
-  return 18;
+  if (remaining > 14) return 3;
+  if (remaining > 8) return 6;
+  if (remaining > 3) return 12;
+  if (remaining > 1) return 18;
+  return 28;
 }
 
 function spinDurationMs(sequenceLength) {
-  if (!sequenceLength) return 6000;
+  if (!sequenceLength) return 10000;
   let totalTicks = 0;
   for (let step = 0; step < sequenceLength; step++) {
     totalTicks += stepDelayTicks(sequenceLength - step - 1);
   }
-  return Math.max(totalTicks * TICK_MS, 4000);
+  return Math.max(totalTicks * TICK_MS, 8000);
 }
 
 function easeOutQuint(t) {
@@ -38,7 +39,7 @@ function indexAtPointer(rotationDeg, segmentCount) {
 function isSpinRecent(spin) {
   if (!spin?.startedAt || !spin.sequence?.length) return false;
   const duration = spinDurationMs(spin.sequence.length);
-  return Date.now() - spin.startedAt < duration + 2500;
+  return Date.now() - spin.startedAt < duration + 4000;
 }
 
 function segmentGradient(segments) {
