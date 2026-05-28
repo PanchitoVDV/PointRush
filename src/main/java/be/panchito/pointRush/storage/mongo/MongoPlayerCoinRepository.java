@@ -93,6 +93,11 @@ public final class MongoPlayerCoinRepository {
         return r.getModifiedCount() == 1;
     }
 
+    /** Verwijdert alle spelerprofielen (coins + shop-voorraad). */
+    public long deleteAll() {
+        return profiles.deleteMany(new Document()).getDeletedCount();
+    }
+
     /** Één gebruikte boost aan het begin van een minigame; alleen als voorraad &gt; 0. */
     public boolean tryConsumeShopCharge(UUID player, String perkKey) {
         UpdateResult r = profiles.updateOne(

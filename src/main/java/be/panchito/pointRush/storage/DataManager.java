@@ -281,4 +281,34 @@ public final class DataManager {
             }
         }
     }
+
+    /**
+     * Wist alle spelerdata: teams (in-memory + MongoDB) en rush-muntprofielen.
+     * Hoofd-thread aanbevolen; Mongo-writes zijn synchroon.
+     */
+    public WipeResult wipeAllPlayerData() {
+        cancelPendingFlush();
+        leaderboardCache.invalidate();
+
+        int teamsRemoved = teamManager.getTeams().size();
+        for (Team team : new ArrayList<>(teamManager.getTeams())) {
+            teamManager.disbandTeam(team);
+        }
+        flushSync();
+
+        long coinProfilesRemoved = 0L;
+        MongoPlayerCoinRepository coins = playerCoinRepo;
+        if (coins != null) {
+            try {
+                coinProfilesRemoved = coins.deleteAll();
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.SEVERE, "Kon speler-muntprofielen niet wissen.", ex);
+                throw new IllegalStateException("Kon rush-muntprofielen niet wissen", ex);
+            }
+        }
+
+        return new WipeResult(teamsRemoved, coinProfilesRemoved);
+    }
+
+    public record WipeResult(int teamsRemoved, long coinProfilesRemoved) {}
 }

@@ -169,7 +169,7 @@ public final class PointRush extends JavaPlugin {
 
         registerCommand("team", new TeamCommand(teamManager, dataManager));
         registerCommand("points", new PointsCommand(teamManager, dataManager));
-        registerCommand("pointrush", new PointRushCommand(eventHistoryManager));
+        registerCommand("pointrush", new PointRushCommand(eventHistoryManager, teamManager, dataManager));
 
         LiveCommand liveCommand = new LiveCommand(this, dataManager.getLiveStreamRepository());
         registerCommand("live", liveCommand);

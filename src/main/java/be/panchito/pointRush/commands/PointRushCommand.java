@@ -3,6 +3,8 @@ package be.panchito.pointRush.commands;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.minigame.MinigameRegistry;
+import be.panchito.pointRush.storage.DataManager;
+import be.panchito.pointRush.team.TeamManager;
 import be.panchito.pointRush.util.Commands;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.SmallText;
@@ -36,9 +38,12 @@ import java.util.Map;
  *     <li>{@code /pointrush} — overview with clickable event buttons.</li>
  *     <li>{@code /pointrush history &lt;event&gt;} — recent finished events.</li>
  *     <li>{@code /pointrush event &lt;id&gt;} — placements of a single past event.</li>
+ *     <li>{@code /pointrush reset [confirm]} — wis alle spelerdata (admin, met bevestiging).</li>
  * </ul>
  */
 public final class PointRushCommand implements CommandExecutor, TabCompleter {
+
+    private static final String RESET_PERMISSION = "pointrush.admin";
 
     private static final int RECENT_LIMIT = 15;
 
@@ -50,9 +55,13 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
             .withZone(ZoneId.systemDefault());
 
     private final EventHistoryManager historyManager;
+    private final TeamManager teamManager;
+    private final DataManager dataManager;
 
-    public PointRushCommand(EventHistoryManager historyManager) {
+    public PointRushCommand(EventHistoryManager historyManager, TeamManager teamManager, DataManager dataManager) {
         this.historyManager = historyManager;
+        this.teamManager = teamManager;
+        this.dataManager = dataManager;
     }
 
     @Override
@@ -66,6 +75,7 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "history" -> handleHistory(sender, args);
             case "event" -> handleEvent(sender, args);
+            case "reset" -> handleReset(sender, args);
             case "help" -> sendOverview(sender);
             default -> {
                 if (EVENTS.containsKey(sub)) {
@@ -178,6 +188,51 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
                         NamedTextColor.GRAY)));
     }
 
+    private void handleReset(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(RESET_PERMISSION)
+                && !(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+            sender.sendMessage(Messages.error("Je hebt geen permissie voor dit commando."));
+            return;
+        }
+
+        if (args.length >= 2 && args[1].equalsIgnoreCase("confirm")) {
+            executeWipe(sender);
+            return;
+        }
+
+        int teams = teamManager.getTeams().size();
+        sender.sendMessage(Messages.warn("Je staat op het punt alle spelerdata te wissen:"));
+        sender.sendMessage(Component.text(SmallText.of("  · alle teams (" + teams + " team(s), leden + punten)"),
+                NamedTextColor.GRAY));
+        sender.sendMessage(Component.text(SmallText.of("  · alle rush-munten en shop-voorraad"),
+                NamedTextColor.GRAY));
+        sender.sendMessage(Component.empty());
+        sender.sendMessage(Component.text(SmallText.of("dit kan niet ongedaan worden gemaakt."),
+                NamedTextColor.RED));
+        sender.sendMessage(Component.empty());
+
+        Component confirm = Component.text()
+                .append(Component.text(SmallText.of("[ bevestigen ]"),
+                        NamedTextColor.RED, TextDecoration.BOLD))
+                .build()
+                .clickEvent(ClickEvent.runCommand("/pointrush reset confirm"))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        SmallText.of("klik om de wipe uit te voeren"),
+                        NamedTextColor.GRAY)));
+        sender.sendMessage(confirm);
+    }
+
+    private void executeWipe(CommandSender sender) {
+        try {
+            DataManager.WipeResult result = dataManager.wipeAllPlayerData();
+            sender.sendMessage(Messages.success(
+                    "Alle spelerdata is gewist (" + result.teamsRemoved() + " team(s) opgeheven, "
+                            + result.coinProfilesRemoved() + " muntprofiel(en) verwijderd)."));
+        } catch (IllegalStateException ex) {
+            sender.sendMessage(Messages.error("Wipe mislukt: " + ex.getMessage()));
+        }
+    }
+
     private void handleEvent(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(Messages.error("Gebruik: /pointrush event <id>"));
@@ -272,11 +327,20 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
                                       @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
             List<String> options = new ArrayList<>(List.of("history", "event", "help"));
+            if (sender.hasPermission(RESET_PERMISSION)
+                    || sender instanceof org.bukkit.command.ConsoleCommandSender) {
+                options.add("reset");
+            }
             options.addAll(EVENTS.keySet());
             return Commands.filterPrefix(options, args[0]);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("history")) {
-            return Commands.filterPrefix(new ArrayList<>(EVENTS.keySet()), args[1]);
+        if (args.length == 2) {
+            if (args[0].equalsIgnoreCase("history")) {
+                return Commands.filterPrefix(new ArrayList<>(EVENTS.keySet()), args[1]);
+            }
+            if (args[0].equalsIgnoreCase("reset")) {
+                return Commands.filterPrefix(List.of("confirm"), args[1]);
+            }
         }
         return List.of();
     }
