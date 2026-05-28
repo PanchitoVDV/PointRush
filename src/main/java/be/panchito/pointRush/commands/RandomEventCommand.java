@@ -24,7 +24,7 @@ import java.util.Locale;
 public final class RandomEventCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "pointrush.randomevent.admin";
-    private static final List<String> SUBCOMMANDS = List.of("spin", "list", "help");
+    private static final List<String> SUBCOMMANDS = List.of("spin", "forcespin", "list", "help");
 
     private final RandomEventService randomEventService;
 
@@ -45,6 +45,7 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
             case "help" -> sendHelp(sender);
             case "list" -> showList(sender);
             case "spin", "start" -> handleSpin(sender);
+            case "forcespin", "force" -> handleForceSpin(sender);
             default -> sendHelp(sender);
         }
         return true;
@@ -55,6 +56,7 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text(SmallText.of("--- Random Event ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
         sender.sendMessage(line("/randomevent", "Draait het rad en kiest morgen's event (start niet meteen)"));
+        sender.sendMessage(line("/randomevent forcespin", "Kies opnieuw, ook als er al iets gepland staat"));
         sender.sendMessage(line("/event start", "Start het geplande event"));
         sender.sendMessage(line("/randomevent list", "Toon welke minigames klaar staan"));
         sender.sendMessage(line("/randomevent help", "Deze help"));
@@ -89,6 +91,13 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Messages.info("Het random event-rad draait — resultaat op de website en voor morgen."));
+    }
+
+    private void handleForceSpin(CommandSender sender) {
+        if (!randomEventService.forceSpin(sender)) {
+            return;
+        }
+        sender.sendMessage(Messages.info("Force spin — het rad draait opnieuw voor morgen's event."));
     }
 
     @Override

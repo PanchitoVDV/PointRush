@@ -1,4 +1,4 @@
-import { eventMeta } from '../constants.js';
+import { EVENT_TYPES, eventMeta } from '../constants.js';
 
 export function formatSchedule(doc) {
   if (!doc) {
@@ -57,13 +57,15 @@ export function demoSchedule() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const scheduledFor = tomorrow.toISOString().slice(0, 10);
 
+  const pool = Object.entries(EVENT_TYPES).map(([id, meta]) => ({
+    id,
+    name: meta.name,
+    icon: meta.icon,
+    accent: meta.color,
+  }));
+
   return {
-    pool: [
-      { id: 'parkour', name: 'Parkour', icon: '🏃', accent: '#55FF55' },
-      { id: 'tnttag', name: 'TNT Tag', icon: '💣', accent: '#FF5555' },
-      { id: 'race', name: 'Race', icon: '🏎️', accent: '#FF55FF' },
-      { id: 'koth', name: 'King of the Hill', icon: '👑', accent: '#AA00AA' },
-    ],
+    pool,
     upcoming: {
       eventId: 'koth',
       displayName: 'King of the Hill',

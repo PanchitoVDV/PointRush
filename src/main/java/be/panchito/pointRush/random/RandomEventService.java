@@ -97,6 +97,17 @@ public final class RandomEventService {
      * Draait het rad, kiest een event uit de pool voor morgen en synchroniseert naar de website.
      */
     public boolean spin(CommandSender initiator) {
+        return spinInternal(initiator, false);
+    }
+
+    /**
+     * Draait het rad opnieuw, ook als er al een event gepland staat (overschrijft de planning).
+     */
+    public boolean forceSpin(CommandSender initiator) {
+        return spinInternal(initiator, true);
+    }
+
+    private boolean spinInternal(CommandSender initiator, boolean force) {
         if (spinning) {
             initiator.sendMessage(Messages.error("Er wordt al een random event-rad gedraaid."));
             return false;
@@ -105,27 +116,34 @@ public final class RandomEventService {
             initiator.sendMessage(Messages.error("Er loopt al een minigame — stop die eerst."));
             return false;
         }
-        if (upcoming() != null) {
+
+        UpcomingEvent existing = upcoming();
+        if (existing != null && !force) {
             initiator.sendMessage(Messages.error("Er staat al een event gepland ("
-                    + upcoming().displayName() + " op " + upcoming().scheduledFor()
-                    + "). Start het eerst met /event start of wacht tot het gespeeld is."));
+                    + existing.displayName() + " op " + existing.scheduledFor()
+                    + "). Gebruik /randomevent forcespin om opnieuw te kiezen."));
             return false;
         }
-
-        List<MinigameRegistry.RandomCandidate> poolCandidates = candidatesInPool();
-        if (poolCandidates.isEmpty()) {
-            refillPoolIfEmpty();
-            poolCandidates = candidatesInPool();
+        if (existing != null) {
+            scheduleState.setUpcoming(null);
+            initiator.sendMessage(Messages.warn("Vorige planning (" + existing.displayName()
+                    + ") wordt overschreven."));
         }
-        if (poolCandidates.isEmpty()) {
+
+        List<MinigameRegistry.RandomCandidate> eligible = candidatesInPool();
+        if (eligible.isEmpty()) {
+            refillPoolIfEmpty();
+            eligible = candidatesInPool();
+        }
+        if (eligible.isEmpty()) {
             initiator.sendMessage(Messages.error("Geen minigame is klaar in de pool. Stel minstens één arena in."));
             return false;
         }
 
-        MinigameRegistry.RandomCandidate winner = poolCandidates.get(
-                ThreadLocalRandom.current().nextInt(poolCandidates.size()));
+        MinigameRegistry.RandomCandidate winner = eligible.get(
+                ThreadLocalRandom.current().nextInt(eligible.size()));
         spinning = true;
-        runWheelAnimation(poolCandidates, winner, initiator);
+        runWheelAnimation(eligible, winner, initiator);
         return true;
     }
 
@@ -179,25 +197,24 @@ public final class RandomEventService {
         persistScheduleAsync();
     }
 
-    private void runWheelAnimation(List<MinigameRegistry.RandomCandidate> pool,
+    private void runWheelAnimation(List<MinigameRegistry.RandomCandidate> eligible,
                                    MinigameRegistry.RandomCandidate winner,
                                    CommandSender initiator) {
         int extraSpins = 18 + ThreadLocalRandom.current().nextInt(8);
         MinigameRegistry.RandomCandidate[] sequence = new MinigameRegistry.RandomCandidate[extraSpins + 1];
         List<String> sequenceIds = new ArrayList<>(extraSpins + 1);
         for (int i = 0; i < extraSpins; i++) {
-            MinigameRegistry.RandomCandidate pick = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+            MinigameRegistry.RandomCandidate pick = eligible.get(ThreadLocalRandom.current().nextInt(eligible.size()));
             sequence[i] = pick;
             sequenceIds.add(pick.id());
         }
         sequence[extraSpins] = winner;
         sequenceIds.add(winner.id());
 
-        List<String> candidateIds = new ArrayList<>();
-        List<String> candidateNames = new ArrayList<>();
-        for (MinigameRegistry.RandomCandidate c : pool) {
-            candidateIds.add(c.id());
-            candidateNames.add(c.displayName());
+        List<String> candidateIds = new ArrayList<>(scheduleState.pool());
+        List<String> candidateNames = new ArrayList<>(candidateIds.size());
+        for (String id : candidateIds) {
+            candidateNames.add(MinigameRegistry.displayName(id));
         }
 
         long spinStart = System.currentTimeMillis();

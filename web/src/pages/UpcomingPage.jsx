@@ -70,7 +70,7 @@ export default function UpcomingPage() {
 
       <div className="upcoming-grid">
         <McPanel title="Event rad" icon="◎" accent={upcoming?.accent}>
-          <EventWheel spin={spin} upcoming={upcoming} />
+          <EventWheel spin={spin} upcoming={upcoming} pool={pool ?? []} />
           {upcoming && (
             <div className="upcoming-banner">
               <span className="upcoming-banner__icon">{upcoming.icon}</span>

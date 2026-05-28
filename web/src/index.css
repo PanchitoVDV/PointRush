@@ -2165,19 +2165,13 @@ a:hover .player-head,
   border-radius: 50%;
   border: 4px solid var(--surface-border-strong);
   box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.35);
-  transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  transform: rotate(var(--ring-rotation, 0deg));
   overflow: hidden;
+  will-change: transform;
+  transform: rotate(0deg);
 }
 
-.event-wheel.is-spinning .event-wheel__ring {
-  transition: none;
-  animation: wheel-wobble 0.15s ease-in-out infinite alternate;
-}
-
-@keyframes wheel-wobble {
-  from { transform: rotate(calc(var(--ring-rotation, 0deg) - 4deg)); }
-  to { transform: rotate(calc(var(--ring-rotation, 0deg) + 4deg)); }
+.event-wheel.is-settled .event-wheel__ring {
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .event-wheel__icon-slot {
@@ -2205,6 +2199,17 @@ a:hover .player-head,
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
+.event-wheel--compact .event-wheel__slot-icon {
+  top: 5%;
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.85rem;
+}
+
+.event-wheel--compact .event-wheel__center {
+  inset: 26%;
+}
+
 .event-wheel__center {
   position: absolute;
   inset: 22%;
@@ -2228,7 +2233,7 @@ a:hover .player-head,
 }
 
 .event-wheel.is-spinning .event-wheel__icon {
-  animation: icon-pulse 0.2s ease-in-out infinite alternate;
+  animation: icon-pulse 0.35s ease-in-out infinite alternate;
 }
 
 @keyframes icon-pulse {
