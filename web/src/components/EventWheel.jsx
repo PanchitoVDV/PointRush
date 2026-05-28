@@ -30,6 +30,16 @@ function isSpinRecent(spin) {
   return Date.now() - spin.startedAt < totalTicks * TICK_MS + 4000;
 }
 
+function segmentGradient(segments) {
+  if (!segments.length) return undefined;
+  const slice = 100 / segments.length;
+  const stops = segments.flatMap((seg, i) => {
+    const color = `${seg.accent ?? '#ffb020'}44`;
+    return [`${color} ${i * slice}%`, `${color} ${(i + 1) * slice}%`];
+  });
+  return `conic-gradient(from -90deg, ${stops.join(', ')})`;
+}
+
 export default function EventWheel({ spin, upcoming }) {
   const [step, setStep] = useState(0);
   const [spinDone, setSpinDone] = useState(false);
@@ -83,6 +93,10 @@ export default function EventWheel({ spin, upcoming }) {
 
   const segments = spin?.candidates?.length ? spin.candidates : (upcoming ? [upcoming] : []);
   const segmentAngle = 360 / Math.max(segments.length, 1);
+  const winnerIndex = Math.max(0, segments.findIndex((s) => s.id === winnerId));
+  const ringRotation = winnerId
+    ? -(winnerIndex * segmentAngle + segmentAngle / 2)
+    : 0;
 
   return (
     <div className={`event-wheel ${spinning ? 'is-spinning' : 'is-settled'}`}>
@@ -90,23 +104,19 @@ export default function EventWheel({ spin, upcoming }) {
       <div
         className="event-wheel__ring"
         style={{
-          '--segment-count': segments.length,
-          '--wheel-rotation': winnerId
-            ? `${-segments.findIndex((s) => s.id === winnerId) * segmentAngle - segmentAngle / 2}deg`
-            : '0deg',
+          '--ring-rotation': `${ringRotation}deg`,
+          background: segmentGradient(segments),
         }}
       >
         {segments.map((seg, i) => (
           <div
             key={seg.id}
-            className="event-wheel__segment"
-            style={{
-              '--i': i,
-              '--accent': seg.accent ?? '#ffb020',
-              transform: `rotate(${i * segmentAngle}deg) skewY(${90 - segmentAngle}deg)`,
-            }}
+            className="event-wheel__icon-slot"
+            style={{ '--slot-angle': `${i * segmentAngle}deg` }}
           >
-            <span className="event-wheel__segment-label">{seg.icon}</span>
+            <span className="event-wheel__slot-icon" title={seg.name ?? seg.displayName}>
+              {seg.icon}
+            </span>
           </div>
         ))}
       </div>

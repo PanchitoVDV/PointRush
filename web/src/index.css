@@ -2164,9 +2164,10 @@ a:hover .player-head,
   inset: 0;
   border-radius: 50%;
   border: 4px solid var(--surface-border-strong);
-  background: conic-gradient(from -90deg, var(--surface-raised) 0deg, rgba(255, 176, 32, 0.08) 180deg, var(--surface-raised) 360deg);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.35);
   transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  transform: rotate(var(--wheel-rotation, 0deg));
+  transform: rotate(var(--ring-rotation, 0deg));
+  overflow: hidden;
 }
 
 .event-wheel.is-spinning .event-wheel__ring {
@@ -2175,25 +2176,33 @@ a:hover .player-head,
 }
 
 @keyframes wheel-wobble {
-  from { transform: rotate(calc(var(--wheel-rotation, 0deg) - 3deg)); }
-  to { transform: rotate(calc(var(--wheel-rotation, 0deg) + 3deg)); }
+  from { transform: rotate(calc(var(--ring-rotation, 0deg) - 4deg)); }
+  to { transform: rotate(calc(var(--ring-rotation, 0deg) + 4deg)); }
 }
 
-.event-wheel__segment {
+.event-wheel__icon-slot {
   position: absolute;
-  inset: 8%;
-  transform-origin: 100% 100%;
-  overflow: hidden;
-  border-radius: 50%;
+  inset: 0;
+  transform: rotate(var(--slot-angle, 0deg));
   pointer-events: none;
 }
 
-.event-wheel__segment-label {
+.event-wheel__slot-icon {
   position: absolute;
-  bottom: 18%;
-  right: 12%;
-  font-size: 1.1rem;
-  transform: skewY(calc(-1 * (90deg - 360deg / var(--segment-count, 8)))) rotate(calc(360deg / var(--segment-count, 8) / 2));
+  top: 7%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.35rem;
+  line-height: 1;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 14, 22, 0.85);
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .event-wheel__center {
