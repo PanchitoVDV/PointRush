@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import McPanel from '../components/McPanel';
 import { EventCard, HeroTopPlayers, LoadingScreen, StatBlock, TeamBadge } from '../components/Ui';
-import { formatPoints, playerHead, teamColor } from '../utils';
+import { formatPoints, playerHead, teamAccent, teamColor } from '../utils';
 
 export default function HomePage() {
   const [data, setData] = useState(null);
@@ -43,7 +43,7 @@ export default function HomePage() {
       </div>
 
       {data.topTeam && (
-        <McPanel title="Team ranking" icon="♛" accent={teamColor(data.topTeam.color)}>
+        <McPanel title="Team ranking" icon="♛" accent={teamAccent(data.topTeam.color)}>
           <p className="panel-desc">Hoogst scorende team op de server.</p>
           <div className="champion-row">
             <img src={playerHead(data.topTeam.leader)} alt="" className="player-head big" />
