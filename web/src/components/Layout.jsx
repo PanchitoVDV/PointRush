@@ -1,45 +1,53 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 
 const links = [
-  { to: '/', label: 'Home', icon: '🏠' },
-  { to: '/teams', label: 'Teams', icon: '⚔️' },
-  { to: '/events', label: 'Events', icon: '🎮' },
-  { to: '/players', label: 'Spelers', icon: '👤' },
+  { to: '/', label: 'Home' },
+  { to: '/teams', label: 'Teams' },
+  { to: '/events', label: 'Events' },
+  { to: '/players', label: 'Spelers' },
 ];
 
 export default function Layout({ demo }) {
   return (
     <div className="app">
-      <div className="sky" />
-      <div className="clouds" />
-      <div className="grass-strip" />
+      <div className="world-bg" aria-hidden="true">
+        <div className="world-bg__sky" />
+        <div className="world-bg__stars" />
+        <div className="world-bg__sun" />
+        <div className="world-bg__mountains world-bg__mountains--far" />
+        <div className="world-bg__mountains world-bg__mountains--near" />
+        <div className="world-bg__terrain" />
+        <div className="world-bg__vignette" />
+      </div>
 
-      <header className="mc-header">
-        <div className="logo-block">
-          <span className="logo-icon">⚡</span>
-          <div>
-            <h1 className="logo-title">PointRush</h1>
-            <p className="logo-sub">cloudito.cloud</p>
-          </div>
+      <header className="site-header">
+        <div className="site-header__inner">
+          <Link to="/" className="brand">
+            <span className="brand__icon" />
+            <div>
+              <span className="brand__title">PointRush</span>
+              <span className="brand__sub">pointrush.coresmp.nl</span>
+            </div>
+          </Link>
+
+          <nav className="site-nav">
+            {links.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                end={l.to === '/'}
+                className={({ isActive }) => `site-nav__link ${isActive ? 'is-active' : ''}`}
+              >
+                {l.label}
+              </NavLink>
+            ))}
+          </nav>
         </div>
-
-        <nav className="mc-nav">
-          {links.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.to === '/'}
-              className={({ isActive }) => `mc-btn nav-btn ${isActive ? 'active' : ''}`}
-            >
-              <span>{l.icon}</span> {l.label}
-            </NavLink>
-          ))}
-        </nav>
       </header>
 
       {demo && (
-        <div className="demo-banner mc-panel">
-          <span>⚠️</span> Demo modus — verbind MongoDB voor live data van de server
+        <div className="demo-banner">
+          Demo modus — verbind MongoDB voor live serverdata
         </div>
       )}
 
@@ -47,9 +55,9 @@ export default function Layout({ demo }) {
         <Outlet />
       </main>
 
-      <footer className="mc-footer">
-        <p>PointRush Minigame Stats · Gekoppeld aan de plugin via MongoDB</p>
-        <Link to="/events" className="footer-link">Bekijk alle events →</Link>
+      <footer className="site-footer">
+        <p>PointRush Stats · CoreSMP</p>
+        <Link to="/events">Alle events</Link>
       </footer>
     </div>
   );

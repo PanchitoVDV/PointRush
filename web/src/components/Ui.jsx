@@ -83,7 +83,7 @@ export function StatBlock({ icon, label, value, highlight }) {
 export function LoadingScreen() {
   return (
     <div className="loading-screen">
-      <div className="loading-block">⛏️</div>
+      <div className="loading-block" />
       <p>Laden...</p>
     </div>
   );
