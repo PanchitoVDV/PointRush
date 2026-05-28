@@ -11,12 +11,10 @@ import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -28,9 +26,8 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "pointrush.ctf.admin";
 
     private static final List<String> SUBCOMMANDS = List.of(
-            "start", "stop", "info", "setflagspawn",
-            "setredspawn", "setbluespawn", "setreddelivery", "setbluedelivery",
-            "setrounds", "setroundduration", "setcapturepoints", "setdeliveryradius",
+            "start", "stop", "info", "setredspawn", "setbluespawn",
+            "setrounds", "setroundduration", "sethidephase", "setcapturepoints", "setcaptureradius",
             "reload", "leave", "help"
     );
 
@@ -72,21 +69,18 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "start" -> handleStart(sender);
             case "stop" -> handleStop(sender);
-            case "setflagspawn" -> handleSetLocation(sender, "flagspawn");
-            case "setredspawn" -> handleSetLocation(sender, "redspawn");
-            case "setbluespawn" -> handleSetLocation(sender, "bluespawn");
-            case "setreddelivery" -> handleSetLocation(sender, "reddelivery");
-            case "setbluedelivery" -> handleSetLocation(sender, "bluedelivery");
+            case "setredspawn" -> handleSetSpawn(sender, CtfSide.RED);
+            case "setbluespawn" -> handleSetSpawn(sender, CtfSide.BLUE);
             case "setrounds" -> handleSetRounds(sender, args);
             case "setroundduration" -> handleSetRoundDuration(sender, args);
+            case "sethidephase" -> handleSetHidePhase(sender, args);
             case "setcapturepoints" -> handleSetCapturePoints(sender, args);
-            case "setdeliveryradius" -> handleSetDeliveryRadius(sender, args);
+            case "setcaptureradius" -> handleSetCaptureRadius(sender, args);
             case "reload" -> handleReload(sender);
             default -> sendHelp(sender);
         }
         return true;
     }
-
 
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(Component.text(SmallText.of("--- PointRush Capture the Flag ---"),
@@ -94,15 +88,13 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(line("/ctf info", "Bekijk setup en status"));
         sender.sendMessage(line("/ctf leave", "Verlaat het lopende event"));
         if (Commands.isAdmin(sender, PERMISSION)) {
-            sender.sendMessage(line("/ctf setflagspawn", "Vlag spawn (midden) op je locatie"));
-            sender.sendMessage(line("/ctf setredspawn", "Rood team spawn"));
-            sender.sendMessage(line("/ctf setbluespawn", "Blauw team spawn"));
-            sender.sendMessage(line("/ctf setreddelivery", "Rood delivery point"));
-            sender.sendMessage(line("/ctf setbluedelivery", "Blauw delivery point"));
-            sender.sendMessage(line("/ctf setrounds <aantal>", "Aantal rondes (even, default 2)"));
+            sender.sendMessage(line("/ctf setredspawn", "Rood team spawn (ook afleverpunt voor zoekers)"));
+            sender.sendMessage(line("/ctf setbluespawn", "Blauw team spawn (ook afleverpunt voor zoekers)"));
+            sender.sendMessage(line("/ctf setrounds <aantal>", "Aantal rondes (default 3)"));
             sender.sendMessage(line("/ctf setroundduration <min>", "Duur per ronde (default 5)"));
+            sender.sendMessage(line("/ctf sethidephase <sec>", "Verstopfase in seconden (default 60)"));
             sender.sendMessage(line("/ctf setcapturepoints <pts>", "Punten per ronde winst (default 75)"));
-            sender.sendMessage(line("/ctf setdeliveryradius <blok>", "Delivery radius (default 3)"));
+            sender.sendMessage(line("/ctf setcaptureradius <blok>", "Radius bij spawn voor afleveren (default 4)"));
             sender.sendMessage(line("/ctf start", "Start het event"));
             sender.sendMessage(line("/ctf stop", "Stop het event"));
             sender.sendMessage(line("/ctf reload", "Herlaad config"));
@@ -121,20 +113,20 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text(SmallText.of("--- PointRush CTF ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
         sender.sendMessage(Messages.info("Status: " + MinigameText.stateLabel(game.getState())));
-        sender.sendMessage(Messages.info("Vlag spawn: " + locText(config.getFlagSpawn())));
         sender.sendMessage(Messages.info("Rood spawn: " + locText(config.getRedSpawn())));
         sender.sendMessage(Messages.info("Blauw spawn: " + locText(config.getBlueSpawn())));
-        sender.sendMessage(Messages.info("Rood delivery: " + locText(config.getRedDelivery())));
-        sender.sendMessage(Messages.info("Blauw delivery: " + locText(config.getBlueDelivery())));
         sender.sendMessage(Messages.info("Rondes: " + config.getRounds()));
         sender.sendMessage(Messages.info("Ronde duur: " + config.getRoundMinutes() + " min"));
-        sender.sendMessage(Messages.info("Punten per capture: " + config.getPointsPerCapture()));
-        sender.sendMessage(Messages.info("Delivery radius: " + config.getDeliveryRadius() + " blok"));
+        sender.sendMessage(Messages.info("Verstopfase: " + config.getHidePhaseSeconds() + " sec"));
+        sender.sendMessage(Messages.info("Punten per winst: " + config.getPointsPerCapture()));
+        sender.sendMessage(Messages.info("Capture radius: " + config.getCaptureRadius() + " blok"));
         if (game.getState() != CtfGame.State.IDLE) {
             sender.sendMessage(Messages.info("Spelers: " + game.getAllPlayerStates().size()));
             if (game.getState() == CtfGame.State.RUNNING) {
                 sender.sendMessage(Messages.info("Huidige ronde: " + game.getRoundNumber()));
-                sender.sendMessage(Messages.info("Aanvaller: " + game.getAttackingSide().getDisplayName()));
+                sender.sendMessage(Messages.info("Verstopt: " + game.getHidingSide().getDisplayName()));
+                sender.sendMessage(Messages.info("Zoekt: " + game.getSeekingSide().getDisplayName()));
+                sender.sendMessage(Messages.info("Fase: " + game.getRoundPhase().name()));
             }
         }
     }
@@ -151,8 +143,7 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (!config.isReady()) {
-            sender.sendMessage(Messages.error(
-                    "CTF setup niet compleet. Stel flag spawn, team spawns en delivery points in."));
+            sender.sendMessage(Messages.error("CTF setup niet compleet. Stel rood en blauw spawn in."));
             return;
         }
         if (!game.start()) {
@@ -170,35 +161,18 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.success("CTF event gestopt."));
     }
 
-    private void handleSetLocation(CommandSender sender, String type) {
+    private void handleSetSpawn(CommandSender sender, CtfSide side) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Messages.error("Alleen spelers kunnen locaties zetten."));
             return;
         }
         Location loc = player.getLocation().clone();
-        switch (type) {
-            case "flagspawn" -> {
-                config.setFlagSpawn(loc);
-                player.sendMessage(Messages.success("Vlag spawn (midden) ingesteld."));
-            }
-            case "redspawn" -> {
-                config.setRedSpawn(loc);
-                player.sendMessage(Messages.success("Rood spawn ingesteld."));
-            }
-            case "bluespawn" -> {
-                config.setBlueSpawn(loc);
-                player.sendMessage(Messages.success("Blauw spawn ingesteld."));
-            }
-            case "reddelivery" -> {
-                config.setRedDelivery(loc);
-                player.sendMessage(Messages.success("Rood delivery point ingesteld."));
-            }
-            case "bluedelivery" -> {
-                config.setBlueDelivery(loc);
-                player.sendMessage(Messages.success("Blauw delivery point ingesteld."));
-            }
-            default -> player.sendMessage(Messages.error("Onbekend locatie type."));
+        if (side == CtfSide.RED) {
+            config.setRedSpawn(loc);
+        } else {
+            config.setBlueSpawn(loc);
         }
+        player.sendMessage(Messages.success(side.getDisplayName() + " spawn ingesteld."));
     }
 
     private void handleSetRounds(CommandSender sender, String[] args) {
@@ -208,8 +182,8 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         }
         int rounds = parseInt(args[1], sender);
         if (rounds < 0) return;
-        if (rounds < 2 || rounds > 20) {
-            sender.sendMessage(Messages.error("Waarde moet tussen 2 en 20 zijn (even aantal)."));
+        if (rounds < 1 || rounds > 20) {
+            sender.sendMessage(Messages.error("Waarde moet tussen 1 en 20 zijn."));
             return;
         }
         config.setRounds(rounds);
@@ -231,6 +205,21 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.success("Ronde duur: " + min + " minuten."));
     }
 
+    private void handleSetHidePhase(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Messages.error("Gebruik: /ctf sethidephase <seconden>"));
+            return;
+        }
+        int sec = parseInt(args[1], sender);
+        if (sec < 0) return;
+        if (sec < 15 || sec > 300) {
+            sender.sendMessage(Messages.error("Waarde moet tussen 15 en 300 seconden zijn."));
+            return;
+        }
+        config.setHidePhaseSeconds(sec);
+        sender.sendMessage(Messages.success("Verstopfase: " + sec + " seconden."));
+    }
+
     private void handleSetCapturePoints(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(Messages.error("Gebruik: /ctf setcapturepoints <punten>"));
@@ -246,9 +235,9 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.success("Punten per ronde winst: " + pts));
     }
 
-    private void handleSetDeliveryRadius(CommandSender sender, String[] args) {
+    private void handleSetCaptureRadius(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(Messages.error("Gebruik: /ctf setdeliveryradius <blokken>"));
+            sender.sendMessage(Messages.error("Gebruik: /ctf setcaptureradius <blokken>"));
             return;
         }
         try {
@@ -257,8 +246,8 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Messages.error("Waarde moet tussen 1 en 15 zijn."));
                 return;
             }
-            config.setDeliveryRadius(radius);
-            sender.sendMessage(Messages.success("Delivery radius: " + radius + " blok."));
+            config.setCaptureRadius(radius);
+            sender.sendMessage(Messages.success("Capture radius: " + radius + " blok."));
         } catch (NumberFormatException ex) {
             sender.sendMessage(Messages.error("Ongeldig getal."));
         }
@@ -299,5 +288,4 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         }
         return List.of();
     }
-
 }

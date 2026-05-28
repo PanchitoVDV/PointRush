@@ -11,6 +11,8 @@ mongodb:
   events-collection: events
   # Actieve streamer links voor de website (/live command).
   live-streams-collection: live_streams
+  # Geplande random events + pool voor /randomevent en /event start.
+  schedule-collection: event_schedule
 
 cache:
   leaderboard-cache-enabled: true

@@ -282,7 +282,7 @@ public final class KothGame {
         trident.editMeta(meta -> {
             meta.displayName(Component.text(SmallText.of("Lanceer drietand"), NamedTextColor.AQUA, TextDecoration.BOLD));
             meta.addEnchant(Enchantment.LOYALTY, 3, true);
-            meta.addEnchant(Enchantment.RIPTIDE, 2, true);
+            meta.addEnchant(Enchantment.RIPTIDE, 3, true);
             meta.setUnbreakable(true);
         });
 

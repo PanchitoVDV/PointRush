@@ -63,6 +63,8 @@ public final class HiddenTargetGame {
 
     private State state = State.IDLE;
     private final Map<UUID, HiddenTargetPlayerState> players = new HashMap<>();
+    /** Laatste geldige aanvaller per slachtoffer (fallback als getKiller() null is). */
+    private final Map<UUID, UUID> lastDamagers = new HashMap<>();
 
     private long countdownEndsMs = 0L;
     private long eventStartedAtMs = 0L;
@@ -131,6 +133,7 @@ public final class HiddenTargetGame {
         eventStartedAtMs = System.currentTimeMillis();
         lastTickMs = eventStartedAtMs;
         historyRecorded = false;
+        lastDamagers.clear();
 
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.getGameMode() == GameMode.CREATIVE || online.getGameMode() == GameMode.SPECTATOR) {
@@ -194,6 +197,7 @@ public final class HiddenTargetGame {
             }
         }
         players.clear();
+        lastDamagers.clear();
     }
 
     private void cancelTask(BukkitTask task) {
@@ -225,10 +229,6 @@ public final class HiddenTargetGame {
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        Location spawn = config.getSpawn();
-        if (spawn != null) {
-            player.teleport(spawn);
-        }
         giveKit(player);
         scoreboard.attach(player);
         player.sendMessage(Messages.info("Hidden Target start binnenkort — volg je kompas naar je geheime target!"));
@@ -375,9 +375,12 @@ public final class HiddenTargetGame {
             ps.setAlive(true);
             ps.setRespawnAtMs(0L);
 
-            Location spawn = config.getSpawn();
-            if (spawn != null) {
-                player.teleport(spawn);
+            Location respawn = config.getSpawn();
+            if (respawn == null) {
+                respawn = ps.getSavedLocation();
+            }
+            if (respawn != null && respawn.getWorld() != null) {
+                player.teleport(respawn);
             }
             giveKit(player);
             updateCompassFor(player, ps.getTargetId());
@@ -404,6 +407,14 @@ public final class HiddenTargetGame {
         }
     }
 
+    public void recordDamager(UUID victimId, UUID attackerId) {
+        if (state != State.RUNNING) return;
+        if (!players.containsKey(victimId) || !players.containsKey(attackerId)) return;
+        if (victimId.equals(attackerId)) return;
+        if (sameTeam(victimId, attackerId)) return;
+        lastDamagers.put(victimId, attackerId);
+    }
+
     /**
      * Called when a participant dies. Resolves target-kill scoring and respawn.
      */
@@ -413,21 +424,28 @@ public final class HiddenTargetGame {
         HiddenTargetPlayerState victimPs = players.get(victim.getUniqueId());
         if (victimPs == null || !victimPs.isAlive()) return;
 
+        UUID victimId = victim.getUniqueId();
+        killer = resolveKiller(victim, killer);
+
         victimPs.setAlive(false);
         victimPs.incrementDeaths();
         victimPs.setRespawnAtMs(System.currentTimeMillis() + config.getRespawnMs());
 
+        UUID reassignedHunter = null;
         boolean hunted = false;
-        if (killer != null && players.containsKey(killer.getUniqueId())) {
+        if (killer != null) {
             HiddenTargetPlayerState killerPs = players.get(killer.getUniqueId());
             if (killerPs != null && killerPs.isAlive()) {
                 UUID killerTarget = killerPs.getTargetId();
-                if (killerTarget != null && killerTarget.equals(victim.getUniqueId())) {
+                if (killerTarget != null && killerTarget.equals(victimId)) {
                     hunted = true;
                     onTargetKill(killer, killerPs, victim, victimPs);
+                    reassignedHunter = killer.getUniqueId();
                 }
             }
         }
+
+        reassignHuntersOfVictim(victimId, reassignedHunter);
 
         victim.getInventory().clear();
         victim.setHealth(20.0);
@@ -543,6 +561,35 @@ public final class HiddenTargetGame {
             HiddenTargetPlayerState ps = players.get(e.getKey());
             if (ps != null) {
                 ps.setTargetId(e.getValue());
+                Player hunter = Bukkit.getPlayer(e.getKey());
+                if (hunter != null) {
+                    updateCompassFor(hunter, e.getValue());
+                }
+            }
+        }
+    }
+
+    private Player resolveKiller(Player victim, Player killerFromEvent) {
+        UUID victimId = victim.getUniqueId();
+        if (killerFromEvent != null && players.containsKey(killerFromEvent.getUniqueId())) {
+            lastDamagers.remove(victimId);
+            return killerFromEvent;
+        }
+        UUID damagerId = lastDamagers.remove(victimId);
+        if (damagerId == null || !players.containsKey(damagerId)) {
+            return null;
+        }
+        Player damager = Bukkit.getPlayer(damagerId);
+        return damager != null && damager.isOnline() ? damager : null;
+    }
+
+    private void reassignHuntersOfVictim(UUID victimId, UUID alreadyReassigned) {
+        for (HiddenTargetPlayerState ps : players.values()) {
+            if (!ps.isAlive()) continue;
+            if (ps.getUuid().equals(alreadyReassigned)) continue;
+            UUID targetId = ps.getTargetId();
+            if (targetId != null && targetId.equals(victimId)) {
+                assignTarget(ps.getUuid());
             }
         }
     }

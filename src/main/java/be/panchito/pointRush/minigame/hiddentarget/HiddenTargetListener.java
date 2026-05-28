@@ -4,6 +4,7 @@ import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -59,8 +60,12 @@ public final class HiddenTargetListener implements Listener {
 
         HiddenTargetPlayerState ps = game.getPlayerState(player.getUniqueId());
         if (ps != null && !ps.isAlive()) {
-            if (game.getConfig().getSpawn() != null) {
-                event.setRespawnLocation(game.getConfig().getSpawn());
+            Location respawn = game.getConfig().getSpawn();
+            if (respawn == null) {
+                respawn = ps.getSavedLocation();
+            }
+            if (respawn != null) {
+                event.setRespawnLocation(respawn);
             }
             game.getPlugin().getServer().getScheduler().runTask(game.getPlugin(), () -> {
                 if (player.isOnline()) {
@@ -93,6 +98,7 @@ public final class HiddenTargetListener implements Listener {
                     event.setCancelled(true);
                     return;
                 }
+                game.recordDamager(victim.getUniqueId(), attacker.getUniqueId());
                 return;
             }
         }

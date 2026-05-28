@@ -1,5 +1,6 @@
 package be.panchito.pointRush;
 
+import be.panchito.pointRush.commands.EventCommand;
 import be.panchito.pointRush.commands.LiveCommand;
 import be.panchito.pointRush.commands.RandomEventCommand;
 import be.panchito.pointRush.commands.PointRushCommand;
@@ -174,8 +175,10 @@ public final class PointRush extends JavaPlugin {
         registerCommand("live", liveCommand);
         getServer().getPluginManager().registerEvents(new LiveStreamListener(liveCommand), this);
 
-        this.randomEventService = new RandomEventService(this);
+        this.randomEventService = new RandomEventService(this, dataManager.getScheduledEventRepository());
+        randomEventService.loadSchedule();
         registerCommand("randomevent", new RandomEventCommand(randomEventService));
+        registerCommand("event", new EventCommand(randomEventService));
 
         this.parkourConfig = new ParkourConfig(this, unifiedSettings);
         parkourConfig.load();

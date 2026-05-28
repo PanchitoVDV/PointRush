@@ -1,9 +1,11 @@
 package be.panchito.pointRush.minigame.koth;
 
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetEngine;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -14,7 +16,9 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -141,17 +145,36 @@ public final class KothListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
         if (game.getState() != KothGame.State.RUNNING) return;
+
+        Action action = event.getAction();
+        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
 
         ItemStack item = event.getItem();
         if (item == null || item.getType().isAir()) return;
 
         if (MinigameGadgetEngine.tryKoth(game.getPlugin(), game, player, item, event.getHand())
                 != MinigameGadgetEngine.Result.NOT_OURS) {
+            event.setCancelled(true);
+            event.setUseItemInHand(Event.Result.DENY);
+            if (action == Action.RIGHT_CLICK_BLOCK) {
+                event.setUseInteractedBlock(Event.Result.DENY);
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        if (game.getState() != KothGame.State.RUNNING) return;
+        if (MinigameGadgetItems.parse(game.getPlugin(), event.getItem()) != null) {
             event.setCancelled(true);
         }
     }

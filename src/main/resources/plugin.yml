@@ -66,9 +66,13 @@ commands:
     usage: /ctf help
     aliases: [ capturetheflag, vlag ]
   randomevent:
-    description: Draai het random event-rad en start een minigame.
+    description: Draai het random event-rad en kies morgen's minigame.
     usage: /randomevent
     aliases: [ revent, random ]
+  event:
+    description: Start het geplande random event.
+    usage: /event start
+    aliases: [ plannedevent ]
   pointrush:
     description: Bekijk PointRush events en hun geschiedenis.
     usage: /pointrush
@@ -169,7 +173,10 @@ permissions:
     description: Mag CTF setup beheren en events starten/stoppen.
     default: op
   pointrush.randomevent.admin:
-    description: Mag /randomevent gebruiken om een random minigame te starten.
+    description: Mag /randomevent gebruiken om morgen's minigame te kiezen.
+    default: op
+  pointrush.event.admin:
+    description: Mag /event start gebruiken om het geplande event te starten.
     default: op
   pointrush.use:
     description: Toegang tot het /pointrush commando (events + history).
@@ -218,6 +225,7 @@ permissions:
       pointrush.ctf.use: true
       pointrush.ctf.admin: true
       pointrush.randomevent.admin: true
+      pointrush.event.admin: true
       pointrush.use: true
       pointrush.coins.use: true
       pointrush.coins.admin: true

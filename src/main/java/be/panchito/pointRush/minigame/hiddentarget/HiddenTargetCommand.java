@@ -91,7 +91,7 @@ public final class HiddenTargetCommand implements CommandExecutor, TabCompleter 
         sender.sendMessage(line("/hiddentarget info", "Bekijk setup en status"));
         sender.sendMessage(line("/hiddentarget leave", "Verlaat het lopende event"));
         if (Commands.isAdmin(sender, PERMISSION)) {
-            sender.sendMessage(line("/hiddentarget setspawn", "Zet arena spawn op je locatie"));
+            sender.sendMessage(line("/hiddentarget setspawn", "Optionele respawn-locatie (anders startpositie)"));
             sender.sendMessage(line("/hiddentarget pos1 / pos2", "Markeer arena region (optioneel)"));
             sender.sendMessage(line("/hiddentarget setduration <min>", "Eventduur (default 10)"));
             sender.sendMessage(line("/hiddentarget setkillpoints <n>", "Punten per target kill (default 1)"));
@@ -139,10 +139,6 @@ public final class HiddenTargetCommand implements CommandExecutor, TabCompleter 
     private void handleStart(CommandSender sender) {
         if (game.getState() != HiddenTargetGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Hidden Target event."));
-            return;
-        }
-        if (!config.isReady()) {
-            sender.sendMessage(Messages.error("Setup niet compleet. Stel minstens /hiddentarget setspawn in."));
             return;
         }
         if (!game.start()) {

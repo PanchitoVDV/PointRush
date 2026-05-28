@@ -2,6 +2,7 @@ package be.panchito.pointRush.random;
 
 import be.panchito.pointRush.PointRush;
 import be.panchito.pointRush.minigame.MinigameRegistry;
+import be.panchito.pointRush.storage.mongo.MongoScheduledEventRepository;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
@@ -16,27 +17,62 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Draait een visueel "rad" voor alle spelers en start een willekeurige,
- * klaarstaande minigame.
+ * Plant random events voor de volgende dag via {@code /randomevent} en start ze
+ * pas met {@code /event start}. Synchroniseert spin-state naar MongoDB voor het website-rad.
  */
 public final class RandomEventService {
 
+    private static final ZoneId SCHEDULE_ZONE = ZoneId.of("Europe/Amsterdam");
+
     private final PointRush plugin;
+    private final MongoScheduledEventRepository scheduleRepo;
+    private EventScheduleState scheduleState;
+
     private volatile boolean spinning;
     private BukkitTask spinTask;
     private BossBar wheelBar;
 
-    public RandomEventService(PointRush plugin) {
+    public RandomEventService(PointRush plugin, MongoScheduledEventRepository scheduleRepo) {
         this.plugin = plugin;
+        this.scheduleRepo = scheduleRepo;
+        this.scheduleState = new EventScheduleState(defaultPoolIds(), null, SpinState.idle());
+    }
+
+    public void loadSchedule() {
+        if (scheduleRepo == null) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                EventScheduleState loaded = scheduleRepo.loadOrDefault(defaultPoolIds());
+                Bukkit.getScheduler().runTask(plugin, () -> scheduleState = loaded);
+            } catch (Exception ex) {
+                plugin.getLogger().warning("Kon event schedule niet laden: " + ex.getMessage());
+            }
+        });
     }
 
     public boolean isSpinning() {
         return spinning;
+    }
+
+    public UpcomingEvent upcoming() {
+        UpcomingEvent u = scheduleState.upcoming();
+        if (u == null || u.status() != UpcomingEvent.UpcomingStatus.SCHEDULED) {
+            return null;
+        }
+        return u;
+    }
+
+    public List<String> poolEventIds() {
+        return scheduleState.pool();
     }
 
     public List<String> listReadyEventNames() {
@@ -49,6 +85,17 @@ public final class RandomEventService {
         return names;
     }
 
+    public List<String> listPoolDisplayNames() {
+        List<String> names = new ArrayList<>();
+        for (String id : scheduleState.pool()) {
+            names.add(MinigameRegistry.displayName(id));
+        }
+        return names;
+    }
+
+    /**
+     * Draait het rad, kiest een event uit de pool voor morgen en synchroniseert naar de website.
+     */
     public boolean spin(CommandSender initiator) {
         if (spinning) {
             initiator.sendMessage(Messages.error("Er wordt al een random event-rad gedraaid."));
@@ -58,21 +105,70 @@ public final class RandomEventService {
             initiator.sendMessage(Messages.error("Er loopt al een minigame — stop die eerst."));
             return false;
         }
-
-        List<MinigameRegistry.RandomCandidate> ready = new ArrayList<>();
-        for (MinigameRegistry.RandomCandidate c : MinigameRegistry.randomCandidates(plugin)) {
-            if (c.ready()) {
-                ready.add(c);
-            }
-        }
-        if (ready.isEmpty()) {
-            initiator.sendMessage(Messages.error("Geen minigame is klaar om te starten. Stel minstens één arena in."));
+        if (upcoming() != null) {
+            initiator.sendMessage(Messages.error("Er staat al een event gepland ("
+                    + upcoming().displayName() + " op " + upcoming().scheduledFor()
+                    + "). Start het eerst met /event start of wacht tot het gespeeld is."));
             return false;
         }
 
-        MinigameRegistry.RandomCandidate winner = ready.get(ThreadLocalRandom.current().nextInt(ready.size()));
+        List<MinigameRegistry.RandomCandidate> poolCandidates = candidatesInPool();
+        if (poolCandidates.isEmpty()) {
+            refillPoolIfEmpty();
+            poolCandidates = candidatesInPool();
+        }
+        if (poolCandidates.isEmpty()) {
+            initiator.sendMessage(Messages.error("Geen minigame is klaar in de pool. Stel minstens één arena in."));
+            return false;
+        }
+
+        MinigameRegistry.RandomCandidate winner = poolCandidates.get(
+                ThreadLocalRandom.current().nextInt(poolCandidates.size()));
         spinning = true;
-        runWheelAnimation(ready, winner, initiator);
+        runWheelAnimation(poolCandidates, winner, initiator);
+        return true;
+    }
+
+    /**
+     * Start het geplande event en haalt het uit de pool.
+     */
+    public boolean startScheduled(CommandSender initiator) {
+        UpcomingEvent scheduled = upcoming();
+        if (scheduled == null) {
+            initiator.sendMessage(Messages.error("Geen event gepland. Gebruik eerst /randomevent."));
+            return false;
+        }
+        if (isAnyMinigameActive()) {
+            initiator.sendMessage(Messages.error("Er loopt al een minigame — stop die eerst."));
+            return false;
+        }
+
+        MinigameRegistry.RandomCandidate candidate = findCandidate(scheduled.eventId());
+        if (candidate == null) {
+            initiator.sendMessage(Messages.error("Onbekend event: " + scheduled.eventId()));
+            return false;
+        }
+        if (!candidate.ready()) {
+            initiator.sendMessage(Messages.error(scheduled.displayName()
+                    + " is niet klaar om te starten (arena ok? geen andere game actief?)."));
+            return false;
+        }
+
+        boolean started = candidate.start();
+        if (!started) {
+            initiator.sendMessage(Messages.error(scheduled.displayName()
+                    + " kon niet starten (genoeg spelers? arena ok?)."));
+            return false;
+        }
+
+        scheduleState.removeFromPool(scheduled.eventId());
+        scheduleState.setUpcoming(null);
+        persistScheduleAsync();
+        refillPoolIfEmpty();
+
+        Bukkit.broadcast(Messages.success(SmallText.of(scheduled.displayName()) + " is gestart!"));
+        initiator.sendMessage(Messages.success("Gepland event gestart: " + scheduled.displayName()
+                + " (uit pool gehaald)."));
         return true;
     }
 
@@ -80,6 +176,7 @@ public final class RandomEventService {
         cancelSpinTask();
         hideWheelBar();
         spinning = false;
+        persistScheduleAsync();
     }
 
     private void runWheelAnimation(List<MinigameRegistry.RandomCandidate> pool,
@@ -87,10 +184,32 @@ public final class RandomEventService {
                                    CommandSender initiator) {
         int extraSpins = 18 + ThreadLocalRandom.current().nextInt(8);
         MinigameRegistry.RandomCandidate[] sequence = new MinigameRegistry.RandomCandidate[extraSpins + 1];
+        List<String> sequenceIds = new ArrayList<>(extraSpins + 1);
         for (int i = 0; i < extraSpins; i++) {
-            sequence[i] = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+            MinigameRegistry.RandomCandidate pick = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+            sequence[i] = pick;
+            sequenceIds.add(pick.id());
         }
         sequence[extraSpins] = winner;
+        sequenceIds.add(winner.id());
+
+        List<String> candidateIds = new ArrayList<>();
+        List<String> candidateNames = new ArrayList<>();
+        for (MinigameRegistry.RandomCandidate c : pool) {
+            candidateIds.add(c.id());
+            candidateNames.add(c.displayName());
+        }
+
+        long spinStart = System.currentTimeMillis();
+        scheduleState.setSpin(new SpinState(
+                true,
+                spinStart,
+                candidateIds,
+                candidateNames,
+                sequenceIds,
+                winner.id()
+        ));
+        persistScheduleAsync();
 
         wheelBar = BossBar.bossBar(
                 Component.text(SmallText.of("het rad draait..."), NamedTextColor.GOLD),
@@ -108,13 +227,14 @@ public final class RandomEventService {
         );
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.7f, 1.2f);
 
-        scheduleWheelStep(sequence, 0, initiator);
+        scheduleWheelStep(sequence, 0, winner, initiator);
     }
 
     private void scheduleWheelStep(MinigameRegistry.RandomCandidate[] sequence, int step,
+                                   MinigameRegistry.RandomCandidate winner,
                                    CommandSender initiator) {
         if (step >= sequence.length) {
-            finishSpin(sequence[sequence.length - 1], initiator);
+            finishSpin(winner, initiator);
             return;
         }
 
@@ -139,39 +259,97 @@ public final class RandomEventService {
 
         long delayTicks = remaining > 8 ? 2L : remaining > 3 ? 5L : remaining > 1 ? 10L : 18L;
         spinTask = Bukkit.getScheduler().runTaskLater(plugin, () ->
-                scheduleWheelStep(sequence, step + 1, initiator), delayTicks);
+                scheduleWheelStep(sequence, step + 1, winner, initiator), delayTicks);
     }
 
     private void finishSpin(MinigameRegistry.RandomCandidate winner, CommandSender initiator) {
         cancelSpinTask();
         hideWheelBar();
 
+        LocalDate tomorrow = LocalDate.now(SCHEDULE_ZONE).plusDays(1);
+        long now = System.currentTimeMillis();
+
+        scheduleState.setUpcoming(new UpcomingEvent(
+                winner.id(),
+                winner.displayName(),
+                tomorrow,
+                now,
+                UpcomingEvent.UpcomingStatus.SCHEDULED
+        ));
+        scheduleState.setSpin(new SpinState(
+                false,
+                scheduleState.spin().startedAtMillis(),
+                scheduleState.spin().candidateIds(),
+                scheduleState.spin().candidateNames(),
+                scheduleState.spin().sequence(),
+                winner.id()
+        ));
+        persistScheduleAsync();
+
         Component winLine = Component.text()
-                .append(Component.text(SmallText.of("het wordt "), NamedTextColor.GRAY))
+                .append(Component.text(SmallText.of("morgen wordt het "), NamedTextColor.GRAY))
                 .append(Component.text(SmallText.of(winner.displayName()), NamedTextColor.GOLD, TextDecoration.BOLD))
                 .append(Component.text("!", NamedTextColor.GRAY))
                 .build();
 
         broadcastTitle(
                 Component.text(SmallText.of(winner.displayName()), NamedTextColor.GOLD, TextDecoration.BOLD),
-                Component.text(SmallText.of("start over een moment..."), NamedTextColor.GREEN)
+                Component.text(SmallText.of("morgen op de planning"), NamedTextColor.GREEN)
         );
         Bukkit.broadcast(Messages.PREFIX.append(winLine));
         playSoundAll(Sound.ENTITY_PLAYER_LEVELUP, 0.9f, 1.0f);
         playSoundAll(Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.2f);
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            boolean started = winner.start();
-            spinning = false;
-            if (started) {
-                Bukkit.broadcast(Messages.success(SmallText.of(winner.displayName()) + " is gestart!"));
-                initiator.sendMessage(Messages.success("Random event gestart: " + winner.displayName()));
-            } else {
-                Bukkit.broadcast(Messages.error(SmallText.of(winner.displayName())
-                        + " kon niet starten (genoeg spelers? arena ok?)."));
-                initiator.sendMessage(Messages.error("Start mislukt na het rad."));
+        spinning = false;
+        initiator.sendMessage(Messages.success("Event gepland voor " + tomorrow + ": "
+                + winner.displayName() + ". Start met /event start."));
+        initiator.sendMessage(Messages.info("Het resultaat staat op de website onder Upcoming events."));
+    }
+
+    private List<MinigameRegistry.RandomCandidate> candidatesInPool() {
+        List<MinigameRegistry.RandomCandidate> out = new ArrayList<>();
+        for (MinigameRegistry.RandomCandidate c : MinigameRegistry.randomCandidates(plugin)) {
+            if (scheduleState.pool().contains(c.id()) && c.ready()) {
+                out.add(c);
             }
-        }, 30L);
+        }
+        return out;
+    }
+
+    private void refillPoolIfEmpty() {
+        if (!scheduleState.pool().isEmpty()) {
+            return;
+        }
+        scheduleState.resetPool(defaultPoolIds());
+        persistScheduleAsync();
+        plugin.getLogger().info("Event-pool was leeg — opnieuw gevuld met alle minigames.");
+    }
+
+    private MinigameRegistry.RandomCandidate findCandidate(String id) {
+        for (MinigameRegistry.RandomCandidate c : MinigameRegistry.randomCandidates(plugin)) {
+            if (c.id().equals(id)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private List<String> defaultPoolIds() {
+        return new ArrayList<>(MinigameRegistry.events().keySet());
+    }
+
+    private void persistScheduleAsync() {
+        if (scheduleRepo == null) {
+            return;
+        }
+        EventScheduleState snapshot = scheduleState;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                scheduleRepo.save(snapshot);
+            } catch (Exception ex) {
+                plugin.getLogger().warning("Kon event schedule niet opslaan: " + ex.getMessage());
+            }
+        });
     }
 
     private void cancelSpinTask() {

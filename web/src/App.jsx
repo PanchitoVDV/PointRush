@@ -8,6 +8,7 @@ import EventDetailPage from './pages/EventDetailPage';
 import PlayersPage from './pages/PlayersPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
 import LivePage from './pages/LivePage';
+import UpcomingPage from './pages/UpcomingPage';
 import { api } from './api/client';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="live" element={<LivePage />} />
         <Route path="teams" element={<TeamsPage />} />
+        <Route path="upcoming" element={<UpcomingPage />} />
         <Route path="events" element={<EventsPage />} />
         <Route path="events/:id" element={<EventDetailPage />} />
         <Route path="players" element={<PlayersPage />} />

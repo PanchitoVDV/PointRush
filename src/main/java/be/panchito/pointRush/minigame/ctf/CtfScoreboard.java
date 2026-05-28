@@ -156,6 +156,10 @@ public final class CtfScoreboard {
                     .append(Component.text(String.valueOf(game.getRoundNumber()), NamedTextColor.WHITE))
                     .append(Component.text(" / " + game.getConfig().getRounds(), NamedTextColor.DARK_GRAY))
                     .build());
+            if (state == CtfGame.State.RUNNING && game.getRoundPhase() == CtfGame.RoundPhase.HIDING) {
+                lines.add(Component.text(SmallText.of("verstopfase ") + game.formatTime(game.getHidePhaseTimeLeftMs()),
+                        NamedTextColor.YELLOW));
+            }
             lines.add(Component.text()
                     .append(Component.text(SmallText.of("rest "), NamedTextColor.GRAY))
                     .append(Component.text(game.formatTime(game.getRoundTimeLeftMs()), NamedTextColor.GOLD))
@@ -172,26 +176,33 @@ public final class CtfScoreboard {
                     .build());
 
             if (state == CtfGame.State.RUNNING) {
-                CtfSide atk = game.getAttackingSide();
-                boolean attacking = me.getSide() == atk;
+                boolean hiding = me.getSide() == game.getHidingSide();
                 lines.add(Component.text()
                         .append(Component.text(SmallText.of("rol: "), NamedTextColor.GRAY))
                         .append(Component.text(
-                                attacking ? SmallText.of("aanval") : SmallText.of("verdedig"),
-                                attacking ? NamedTextColor.RED : NamedTextColor.AQUA,
+                                hiding ? SmallText.of("verstop") : SmallText.of("zoek"),
+                                hiding ? NamedTextColor.AQUA : NamedTextColor.RED,
                                 TextDecoration.BOLD))
                         .build());
 
-                UUID carrier = game.getFlagCarrier();
-                if (carrier != null) {
-                    Player cp = Bukkit.getPlayer(carrier);
-                    String name = cp != null ? cp.getName() : "?";
-                    lines.add(Component.text()
-                            .append(Component.text(SmallText.of("vlag: "), NamedTextColor.GRAY))
-                            .append(Component.text(truncate(name, 12), NamedTextColor.GOLD))
-                            .build());
+                if (game.getRoundPhase() == CtfGame.RoundPhase.ACTIVE) {
+                    UUID carrier = game.getFlagCarrier();
+                    if (carrier != null) {
+                        Player cp = Bukkit.getPlayer(carrier);
+                        String name = cp != null ? cp.getName() : "?";
+                        lines.add(Component.text()
+                                .append(Component.text(SmallText.of("vlag bij "), NamedTextColor.GRAY))
+                                .append(Component.text(truncate(name, 12), NamedTextColor.GOLD))
+                                .build());
+                    } else if (game.isFlagPlanted()) {
+                        lines.add(Component.text(SmallText.of("vlag: ergens verborgen"), NamedTextColor.YELLOW));
+                    } else {
+                        lines.add(Component.text(SmallText.of("vlag: nog niet geplant"), NamedTextColor.DARK_GRAY));
+                    }
+                } else if (hiding) {
+                    lines.add(Component.text(SmallText.of("plant de vlag!"), NamedTextColor.GREEN));
                 } else {
-                    lines.add(Component.text(SmallText.of("vlag: op spawn"), NamedTextColor.YELLOW));
+                    lines.add(Component.text(SmallText.of("wacht op zoekfase"), NamedTextColor.DARK_GRAY));
                 }
             }
         }

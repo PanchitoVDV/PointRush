@@ -5,6 +5,7 @@ import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.storage.mongo.MongoEventRepository;
 import be.panchito.pointRush.storage.mongo.MongoLiveStreamRepository;
 import be.panchito.pointRush.storage.mongo.MongoPlayerCoinRepository;
+import be.panchito.pointRush.storage.mongo.MongoScheduledEventRepository;
 import be.panchito.pointRush.storage.mongo.MongoTeamRepository;
 import be.panchito.pointRush.team.LeaderboardCache;
 import be.panchito.pointRush.team.Team;
@@ -41,6 +42,7 @@ public final class DataManager {
     private MongoPlayerCoinRepository playerCoinRepo;
     private MongoEventRepository eventRepo;
     private MongoLiveStreamRepository liveStreamRepo;
+    private MongoScheduledEventRepository scheduledEventRepo;
 
     private final Object flushLock = new Object();
     private volatile BukkitTask pendingFlush;
@@ -62,6 +64,7 @@ public final class DataManager {
         String playerCoins = yaml.getString("mongodb.player-coins-collection", "player_coins");
         String eventsCollection = yaml.getString("mongodb.events-collection", "events");
         String liveStreams = yaml.getString("mongodb.live-streams-collection", "live_streams");
+        String scheduleCollection = yaml.getString("mongodb.schedule-collection", "event_schedule");
 
         try {
             mongoClient = MongoClients.create(uri);
@@ -69,6 +72,7 @@ public final class DataManager {
             playerCoinRepo = new MongoPlayerCoinRepository(mongoClient, database, playerCoins);
             eventRepo = new MongoEventRepository(mongoClient, database, eventsCollection);
             liveStreamRepo = new MongoLiveStreamRepository(mongoClient, database, liveStreams);
+            scheduledEventRepo = new MongoScheduledEventRepository(mongoClient, database, scheduleCollection);
 
             teamManager.clear();
             List<Team> fromMongo = teamRepo.loadAll(plugin.getLogger());
@@ -90,7 +94,8 @@ public final class DataManager {
             plugin.getLogger().info("MongoDB verbonden. Teams geladen: " + teamManager.getTeams().size()
                     + "; player coins-collectie: " + playerCoins
                     + "; events-collectie: " + eventsCollection
-                    + "; live streams-collectie: " + liveStreams);
+                    + "; live streams-collectie: " + liveStreams
+                    + "; schedule-collectie: " + scheduleCollection);
         } catch (Exception ex) {
             shutdownMongoQuiet();
             logMongoConnectivityHints(ex);
@@ -184,11 +189,16 @@ public final class DataManager {
             playerCoinRepo = null;
             eventRepo = null;
             liveStreamRepo = null;
+            scheduledEventRepo = null;
         }
     }
 
     public MongoLiveStreamRepository getLiveStreamRepository() {
         return liveStreamRepo;
+    }
+
+    public MongoScheduledEventRepository getScheduledEventRepository() {
+        return scheduledEventRepo;
     }
 
     /** Mongo-profiel voor verzamelde Nexo collectible coins ({@code null} als verbinding geforceerd sloot). */

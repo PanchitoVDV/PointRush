@@ -8,6 +8,7 @@ import {
   formatTeam,
 } from '../services/stats.js';
 import { demoLiveStreams, formatLiveStream } from '../services/live.js';
+import { demoSchedule, formatSchedule, groupEventsByDay } from '../services/schedule.js';
 
 const router = Router();
 
@@ -145,6 +146,43 @@ router.get('/players/:uuid', async (req, res) => {
     res.json({ player, recentEvents: events.slice(0, 20), coins, demo: false });
   } catch {
     res.status(500).json({ error: 'Kon speler niet laden' });
+  }
+});
+
+router.get('/schedule', async (_req, res) => {
+  const db = await getDb();
+  if (!db) {
+    return res.json({ ...demoSchedule(), demo: true });
+  }
+
+  try {
+    const doc = await db.collection(collections().schedule).findOne({ _id: 'current' });
+    res.json({ ...formatSchedule(doc), demo: false });
+  } catch {
+    res.json({ ...demoSchedule(), demo: true });
+  }
+});
+
+router.get('/schedule/calendar', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit ?? '120', 10) || 120, 365);
+  const db = await getDb();
+
+  if (!db) {
+    const days = groupEventsByDay(demoData().events);
+    return res.json({ days, demo: true });
+  }
+
+  try {
+    const docs = await db
+      .collection(collections().events)
+      .find({})
+      .sort({ ended: -1 })
+      .limit(limit)
+      .toArray();
+    const events = docs.map(formatEvent);
+    res.json({ days: groupEventsByDay(events), demo: false });
+  } catch {
+    res.json({ days: groupEventsByDay(demoData().events), demo: true });
   }
 });
 

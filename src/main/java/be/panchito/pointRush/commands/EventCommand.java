@@ -1,6 +1,7 @@
 package be.panchito.pointRush.commands;
 
 import be.panchito.pointRush.random.RandomEventService;
+import be.panchito.pointRush.random.UpcomingEvent;
 import be.panchito.pointRush.util.Commands;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.SmallText;
@@ -10,25 +11,23 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code /randomevent} — draait het random event-rad en plant morgen's minigame.
+ * {@code /event start} — start het geplande random event.
  */
-public final class RandomEventCommand implements CommandExecutor, TabCompleter {
+public final class EventCommand implements CommandExecutor, TabCompleter {
 
-    private static final String PERMISSION = "pointrush.randomevent.admin";
-    private static final List<String> SUBCOMMANDS = List.of("spin", "list", "help");
+    private static final String PERMISSION = "pointrush.event.admin";
+    private static final List<String> SUBCOMMANDS = List.of("start", "status", "help");
 
     private final RandomEventService randomEventService;
 
-    public RandomEventCommand(RandomEventService randomEventService) {
+    public EventCommand(RandomEventService randomEventService) {
         this.randomEventService = randomEventService;
     }
 
@@ -40,24 +39,22 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        String sub = args.length == 0 ? "spin" : args[0].toLowerCase(Locale.ROOT);
+        String sub = args.length == 0 ? "help" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "help" -> sendHelp(sender);
-            case "list" -> showList(sender);
-            case "spin", "start" -> handleSpin(sender);
+            case "status" -> showStatus(sender);
+            case "start" -> randomEventService.startScheduled(sender);
             default -> sendHelp(sender);
         }
         return true;
     }
 
-
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(Component.text(SmallText.of("--- Random Event ---"),
+        sender.sendMessage(Component.text(SmallText.of("--- Event planning ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
-        sender.sendMessage(line("/randomevent", "Draait het rad en kiest morgen's event (start niet meteen)"));
-        sender.sendMessage(line("/event start", "Start het geplande event"));
-        sender.sendMessage(line("/randomevent list", "Toon welke minigames klaar staan"));
-        sender.sendMessage(line("/randomevent help", "Deze help"));
+        sender.sendMessage(line("/event start", "Start het geplande random event"));
+        sender.sendMessage(line("/event status", "Toon gepland event en pool"));
+        sender.sendMessage(line("/randomevent", "Kies morgen's event via het rad (start niet meteen)"));
     }
 
     private Component line(String usage, String description) {
@@ -68,27 +65,25 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
                 .build();
     }
 
-    private void showList(CommandSender sender) {
-        List<String> ready = randomEventService.listReadyEventNames();
-        sender.sendMessage(Component.text(SmallText.of("--- Klaar voor random event ---"),
+    private void showStatus(CommandSender sender) {
+        sender.sendMessage(Component.text(SmallText.of("--- Event status ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
-        if (ready.isEmpty()) {
-            sender.sendMessage(Messages.warn("Geen minigames klaar."));
-            return;
+
+        UpcomingEvent upcoming = randomEventService.upcoming();
+        if (upcoming != null) {
+            sender.sendMessage(Messages.info("Gepland: " + upcoming.displayName()
+                    + " op " + upcoming.scheduledFor()));
+        } else {
+            sender.sendMessage(Messages.warn("Geen event gepland. Gebruik /randomevent."));
         }
-        for (String name : ready) {
-            sender.sendMessage(Messages.info("• " + name));
-        }
+
+        List<String> pool = randomEventService.listPoolDisplayNames();
+        sender.sendMessage(Messages.info("Pool (" + pool.size() + "): "
+                + (pool.isEmpty() ? "leeg (wordt automatisch gevuld)" : String.join(", ", pool))));
+
         if (randomEventService.isSpinning()) {
             sender.sendMessage(Messages.warn("Het rad draait momenteel..."));
         }
-    }
-
-    private void handleSpin(CommandSender sender) {
-        if (!randomEventService.spin(sender)) {
-            return;
-        }
-        sender.sendMessage(Messages.info("Het random event-rad draait — resultaat op de website en voor morgen."));
     }
 
     @Override
@@ -100,5 +95,4 @@ public final class RandomEventCommand implements CommandExecutor, TabCompleter {
         }
         return List.of();
     }
-
 }

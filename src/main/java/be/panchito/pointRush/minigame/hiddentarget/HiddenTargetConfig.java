@@ -218,6 +218,6 @@ public final class HiddenTargetConfig {
     }
 
     public boolean isReady() {
-        return spawn != null;
+        return true;
     }
 }

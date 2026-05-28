@@ -71,7 +71,7 @@ public final class CtfListener implements Listener {
     public void onDamageByEntity(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
         if (!game.isParticipant(victim.getUniqueId())) return;
-        if (game.getState() != CtfGame.State.RUNNING) {
+        if (!game.isCombatAllowed()) {
             event.setCancelled(true);
             return;
         }
@@ -80,7 +80,6 @@ public final class CtfListener implements Listener {
         if (attacker != null && game.isParticipant(attacker.getUniqueId())) {
             if (game.sameSide(victim.getUniqueId(), attacker.getUniqueId())) {
                 event.setCancelled(true);
-                return;
             }
         }
     }
@@ -131,7 +130,16 @@ public final class CtfListener implements Listener {
             return;
         }
 
-        if (game.getState() == CtfGame.State.RUNNING) {
+        if (game.isSeekerFrozen(player)) {
+            if (event.getFrom().getX() != event.getTo().getX()
+                    || event.getFrom().getY() != event.getTo().getY()
+                    || event.getFrom().getZ() != event.getTo().getZ()) {
+                event.setTo(event.getFrom().clone());
+            }
+            return;
+        }
+
+        if (game.getState() == CtfGame.State.RUNNING && game.getRoundPhase() == CtfGame.RoundPhase.ACTIVE) {
             game.tryDeliverFlag(player);
         }
     }
@@ -141,10 +149,15 @@ public final class CtfListener implements Listener {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
         if (game.getState() != CtfGame.State.RUNNING) return;
+        if (!event.getAction().isRightClick()) return;
 
-        if (event.getAction().isRightClick()) {
-            game.tryPickupFlag(player);
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        if (game.isFlagItem(offhand)) {
+            game.tryPlantFlag(player);
+            event.setCancelled(true);
+            return;
         }
+        game.tryPickupFlag(player);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -166,7 +179,9 @@ public final class CtfListener implements Listener {
         }
         event.setCancelled(true);
         if (game.isFlagItem(event.getItemDrop().getItemStack())) {
-            game.returnFlagToSpawn();
+            if (game.isFlagPlanted()) {
+                game.returnFlagToPlantedLocation();
+            }
         }
     }
 
