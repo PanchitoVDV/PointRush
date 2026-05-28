@@ -1,0 +1,217 @@
+name: PointRush
+version: '${version}'
+main: be.panchito.pointRush.PointRush
+api-version: '1.21'
+load: STARTUP
+authors: [ Panchito ]
+description: Plugin van cloudito.cloud
+website: cloudito.cloud
+depend: [ MTVehicles, Nexo ]
+
+commands:
+  team:
+    description: Beheer je PointRush team.
+    usage: /team help
+    aliases: [ t, pteam ]
+  points:
+    description: Bekijk en beheer team punten.
+    usage: /points help
+    aliases: [ pts, score ]
+  parkour:
+    description: PointRush parkour minigame.
+    usage: /parkour help
+    aliases: [ pk ]
+  tnttag:
+    description: PointRush TNT Tag minigame.
+    usage: /tnttag help
+    aliases: [ tt, tnt ]
+  tntrun:
+    description: PointRush TNT Run minigame.
+    usage: /tntrun help
+    aliases: [ tr, run ]
+  race:
+    description: PointRush Race minigame (autorace met MTVehicles).
+    usage: /race help
+    aliases: [ rc, autorace ]
+  boatrace:
+    description: PointRush Bootrace minigame (vanilla boten).
+    usage: /boatrace help
+    aliases: [ bootrace, br ]
+  bingo:
+    description: Team bingo — map GUI, gedeelde kaart, survival scavenger.
+    usage: /bingo help
+    aliases: [ bingomc, scavenger ]
+  koth:
+    description: PointRush King of the Hill minigame.
+    usage: /koth help
+    aliases: [ kingofthehill, hill ]
+  floorislava:
+    description: PointRush Floor is Lava minigame.
+    usage: /floorislava help
+    aliases: [ fil, lava ]
+  treasurehunt:
+    description: Survival Treasure Hunt — hints, coords en gear loot.
+    usage: /treasurehunt help
+    aliases: [ th, treasure ]
+  goldrush:
+    description: Gold Rush — mine goud voor punten, 1 uur competitie.
+    usage: /goldrush help
+    aliases: [ gr, gold ]
+  hiddentarget:
+    description: Hidden Target — jacht op geheime targets met kompas.
+    usage: /hiddentarget help
+    aliases: [ ht, target ]
+  ctf:
+    description: Capture the Flag — vlag pakken en afleveren.
+    usage: /ctf help
+    aliases: [ capturetheflag, vlag ]
+  randomevent:
+    description: Draai het random event-rad en start een minigame.
+    usage: /randomevent
+    aliases: [ revent, random ]
+  pointrush:
+    description: Bekijk PointRush events en hun geschiedenis.
+    usage: /pointrush
+    aliases: [ pr, events ]
+  coins:
+    description: Je Rush-munten (GUI) — CoreSMP PointRush events.
+    usage: /coins help
+    aliases: [ pmcoins ]
+  shop:
+    description: Rush-winkel — perks voor PointRush met Rush-tegoed.
+    usage: /shop
+    aliases: [ prshop, coinshop ]
+
+permissions:
+  pointrush.team.use:
+    description: Toegang tot het /team commando.
+    default: true
+  pointrush.points.use:
+    description: Toegang tot het /points commando (leaderboard).
+    default: true
+  pointrush.points.admin:
+    description: Mag punten toevoegen, aftrekken, instellen of resetten.
+    default: op
+  pointrush.parkour.use:
+    description: Toegang tot het /parkour info en /parkour leave commando.
+    default: true
+  pointrush.parkour.admin:
+    description: Mag de parkour setup beheren en events starten/stoppen.
+    default: op
+  pointrush.tnttag.use:
+    description: Toegang tot het /tnttag info en /tnttag leave commando.
+    default: true
+  pointrush.tnttag.admin:
+    description: Mag de TNT Tag setup beheren en events starten/stoppen.
+    default: op
+  pointrush.tntrun.use:
+    description: Toegang tot het /tntrun info en /tntrun leave commando.
+    default: true
+  pointrush.tntrun.admin:
+    description: Mag de TNT Run setup beheren en events starten/stoppen.
+    default: op
+  pointrush.race.use:
+    description: Toegang tot het /race info en /race leave commando.
+    default: true
+  pointrush.race.admin:
+    description: Mag de Race setup beheren en events starten/stoppen.
+    default: op
+  pointrush.boatrace.use:
+    description: Toegang tot het /boatrace info en /boatrace leave commando.
+    default: true
+  pointrush.boatrace.admin:
+    description: Mag de Bootrace setup beheren en events starten/stoppen.
+    default: op
+  pointrush.bingo.use:
+    description: Toegang tot /bingo info en progress.
+    default: true
+  pointrush.bingo.admin:
+    description: Mag Bingo events starten/stoppen.
+    default: op
+  pointrush.koth.use:
+    description: Toegang tot het /koth info en /koth leave commando.
+    default: true
+  pointrush.koth.admin:
+    description: Mag de KOTH setup beheren en events starten/stoppen.
+    default: op
+  pointrush.floorislava.use:
+    description: Toegang tot het /floorislava info en /floorislava leave commando.
+    default: true
+  pointrush.floorislava.admin:
+    description: Mag de Floor is Lava setup beheren en events starten/stoppen.
+    default: op
+  pointrush.treasurehunt.use:
+    description: Toegang tot /treasurehunt info en listtreasures.
+    default: true
+  pointrush.treasurehunt.admin:
+    description: Mag Treasure Hunt schatten instellen en events starten/stoppen.
+    default: op
+  pointrush.goldrush.use:
+    description: Toegang tot /goldrush info en top.
+    default: true
+  pointrush.goldrush.admin:
+    description: Mag Gold Rush events starten/stoppen.
+    default: op
+  pointrush.hiddentarget.use:
+    description: Toegang tot /hiddentarget info en /hiddentarget leave.
+    default: true
+  pointrush.hiddentarget.admin:
+    description: Mag Hidden Target setup beheren en events starten/stoppen.
+    default: op
+  pointrush.ctf.use:
+    description: Toegang tot /ctf info en /ctf leave.
+    default: true
+  pointrush.ctf.admin:
+    description: Mag CTF setup beheren en events starten/stoppen.
+    default: op
+  pointrush.randomevent.admin:
+    description: Mag /randomevent gebruiken om een random minigame te starten.
+    default: op
+  pointrush.use:
+    description: Toegang tot het /pointrush commando (events + history).
+    default: true
+  pointrush.coins.use:
+    description: Rush-muntmenu (/coins) en tekst-overzicht (/coins info).
+    default: true
+  pointrush.coins.admin:
+    description: Rush-munt spawnplekken en config beheren.
+    default: op
+  pointrush.shop.use:
+    description: Toegang tot /shop (Rush-winkel GUI).
+    default: true
+  pointrush.admin:
+    description: Volledige PointRush admin rechten.
+    default: op
+    children:
+      pointrush.team.use: true
+      pointrush.points.use: true
+      pointrush.points.admin: true
+      pointrush.parkour.use: true
+      pointrush.parkour.admin: true
+      pointrush.tnttag.use: true
+      pointrush.tnttag.admin: true
+      pointrush.tntrun.use: true
+      pointrush.tntrun.admin: true
+      pointrush.race.use: true
+      pointrush.race.admin: true
+      pointrush.boatrace.use: true
+      pointrush.boatrace.admin: true
+      pointrush.bingo.use: true
+      pointrush.bingo.admin: true
+      pointrush.koth.use: true
+      pointrush.koth.admin: true
+      pointrush.floorislava.use: true
+      pointrush.floorislava.admin: true
+      pointrush.treasurehunt.use: true
+      pointrush.treasurehunt.admin: true
+      pointrush.goldrush.use: true
+      pointrush.goldrush.admin: true
+      pointrush.hiddentarget.use: true
+      pointrush.hiddentarget.admin: true
+      pointrush.ctf.use: true
+      pointrush.ctf.admin: true
+      pointrush.randomevent.admin: true
+      pointrush.use: true
+      pointrush.coins.use: true
+      pointrush.coins.admin: true
+      pointrush.shop.use: true

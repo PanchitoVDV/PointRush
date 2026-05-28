@@ -1,0 +1,81 @@
+# PointRush central settings (must be UTF-8).
+# Team names, points and member UUIDs are stored in MongoDB.
+
+mongodb:
+  uri: mongodb://localhost:27017
+  database: pointrush
+  teams-collection: teams
+  # Per-speler collectible coins (Nexo IDs + totalen).
+  player-coins-collection: player_coins
+  # Event history voor de stats website (gesynchroniseerd vanuit events.yml).
+  events-collection: events
+
+cache:
+  leaderboard-cache-enabled: true
+  async-writes: true
+  debounce-ms: 400
+
+parkour: {}
+
+tnttag: {}
+
+tntrun: {}
+
+koth:
+  pointSeconds: 60
+  durationMinutes: 30
+  spotRespawnSeconds: 45
+  spots: {}
+
+floorislava:
+  lavaRiseSeconds: 60
+  itemDropSeconds: 30
+
+treasurehunt:
+  hintIntervalSeconds: 120
+  durationMinutes: 45
+  claimRadius: 2.5
+  treasures: {}
+
+goldrush:
+  durationMinutes: 60
+  leaderboardIntervalSeconds: 300
+
+hiddentarget:
+  durationMinutes: 10
+  killPoints: 1
+  huntedPenalty: 1
+  respawnSeconds: 5
+
+ctf:
+  roundMinutes: 5
+  rounds: 2
+  pointsPerCapture: 75
+  deliveryRadius: 3.0
+
+race: {}
+
+boatrace:
+  boatType: OAK
+
+bingo:
+  durationMinutes: 60
+  material-pool: []
+
+# Nexo collectible coins: spawn blokken (voetpositie). Spawning alleen tijdens actieve minigames.
+coins:
+  enabled: true
+  # Periodieke check om lege spawnplekken te vullen (mits minigame loopt en pickup-cooldown voorbij).
+  refill-interval-ticks: 160
+  # Na pickup op een plek: pas daarna weer een coin (12000 ticks = 10 min bij 20 TPS).
+  pickup-respawn-delay-ticks: 12000
+  # Horizontaal/verticaal: geen tweede coin als hier al een PointRush-coin ligt.
+  proximity-radius: 2.5
+  # Nexo-item id's waaruit random gekozen wordt. Leeg laten = standaard Colorwave golden coins.
+  pool: []
+  # Voeg plaatsen toe met /coins addspawn ; genummerd zoals checkpoints.
+  spawns: {}
+
+# Shop: credits per Nexo-munt (hoger = meer waarde). Leeg {} = plugin-defaults (diamant/skull hoogst).
+shop:
+  coin-credits: {}
