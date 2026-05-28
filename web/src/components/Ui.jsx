@@ -68,6 +68,37 @@ export function EventCard({ event }) {
   );
 }
 
+/** Compact row for the events overview page */
+export function EventListRow({ event }) {
+  const winner = event.placements?.[0];
+  const top3 = (event.placements ?? []).slice(0, 3);
+
+  return (
+    <Link to={`/events/${event.id}`} className="event-list-row">
+      <span className="event-list-row__dot" style={{ background: event.accent }} />
+      <div className="event-list-row__main">
+        <span className="event-list-row__name">{event.displayName}</span>
+        <time className="event-list-row__date">{formatDate(event.endedAt)}</time>
+      </div>
+      <div className="event-list-row__result">
+        {top3.length > 0 ? (
+          top3.map((p) => (
+            <span key={p.rank} className="event-list-row__player">
+              {p.rank === 1 ? p.playerName : `${p.rank}. ${p.playerName}`}
+            </span>
+          ))
+        ) : (
+          <span className="event-list-row__player event-list-row__player--muted">—</span>
+        )}
+      </div>
+      {winner && (
+        <span className="event-list-row__pts">+{winner.score}</span>
+      )}
+      <span className="event-list-row__arrow">→</span>
+    </Link>
+  );
+}
+
 export function StatBlock({ icon, label, value, highlight }) {
   return (
     <div className={`stat-block ${highlight ? 'highlight' : ''}`}>

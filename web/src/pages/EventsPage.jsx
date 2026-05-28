@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import McPanel from '../components/McPanel';
-import { EventCard, LoadingScreen } from '../components/Ui';
+import { EventListRow, LoadingScreen } from '../components/Ui';
 
 export default function EventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -34,40 +34,39 @@ export default function EventsPage() {
 
   return (
     <div className="page events-page">
-      <McPanel title="Event Geschiedenis" icon="🎮">
-        <p className="panel-desc">
-          Alle afgelopen minigames — {total} event{total !== 1 ? 's' : ''} totaal.
-        </p>
-
-        <div className="filter-bar">
-          <button
-            type="button"
-            className={`mc-btn filter-btn ${!filter ? 'active' : ''}`}
-            onClick={() => setFilter('')}
-          >
-            Alles
-          </button>
-          {meta.map((e) => (
-            <button
-              key={e.id}
-              type="button"
-              className={`mc-btn filter-btn ${filter === e.id ? 'active' : ''}`}
-              onClick={() => setFilter(e.id)}
-              style={{ '--filter-accent': e.color }}
+      <McPanel title="Event geschiedenis">
+        <div className="events-toolbar">
+          <p className="events-count">
+            {total} event{total !== 1 ? 's' : ''}
+            {filter ? ` · ${meta.find((m) => m.id === filter)?.name ?? filter}` : ''}
+          </p>
+          <label className="events-filter">
+            <span>Filter</span>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
             >
-              {e.icon} {e.name}
-            </button>
-          ))}
+              <option value="">Alle minigames</option>
+              {meta.map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {loading ? (
           <LoadingScreen />
         ) : events.length === 0 ? (
-          <p className="empty">Geen events gevonden voor dit filter.</p>
+          <p className="empty">Geen events gevonden.</p>
         ) : (
-          <div className="event-grid">
+          <div className="event-list">
+            <div className="event-list-head">
+              <span>Event</span>
+              <span>Top spelers</span>
+              <span>Punten</span>
+            </div>
             {events.map((e) => (
-              <EventCard key={e.id} event={e} />
+              <EventListRow key={e.id} event={e} />
             ))}
           </div>
         )}

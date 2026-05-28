@@ -54,11 +54,6 @@ export default function Layout({ demo }) {
       <main className="main-content">
         <Outlet />
       </main>
-
-      <footer className="site-footer">
-        <p>PointRush Stats · CoreSMP</p>
-        <Link to="/events">Alle events</Link>
-      </footer>
     </div>
   );
 }
