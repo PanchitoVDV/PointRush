@@ -53,7 +53,7 @@ export function TeamPodium({ teams, maxPoints }) {
             <div className="team-podium__avatars">
               {(team.members ?? []).slice(0, 4).map((uuid) => (
                 <Link key={uuid} to={`/players/${uuid}`}>
-                  <PlayerAvatar uuid={uuid} size={rank === 1 ? 36 : 30} />
+                  <PlayerAvatar uuid={uuid} size={rank === 1 ? 48 : 38} />
                 </Link>
               ))}
             </div>
@@ -92,7 +92,7 @@ export function TeamRankRow({ team, rank, maxPoints }) {
       <div className="team-row__heads">
         {(team.members ?? []).slice(0, 4).map((uuid) => (
           <Link key={uuid} to={`/players/${uuid}`} title="Speler profiel">
-            <PlayerAvatar uuid={uuid} size={28} />
+            <PlayerAvatar uuid={uuid} size={36} />
           </Link>
         ))}
       </div>
