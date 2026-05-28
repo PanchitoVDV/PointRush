@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { playerHead, teamColor, formatDate, rankMedal } from '../utils';
+import { playerHead, playerBody, teamColor, formatDate, rankMedal } from '../utils';
 
 export function PlayerAvatar({ uuid, name, size = 40 }) {
   return (
@@ -96,6 +96,41 @@ export function EventListRow({ event }) {
       )}
       <span className="event-list-row__arrow">→</span>
     </Link>
+  );
+}
+
+export function HeroTopPlayers({ players }) {
+  const top = (players ?? []).slice(0, 3);
+  if (top.length === 0) return null;
+
+  // Podium order: #2, #1, #3
+  const ordered = [
+    top[1] ? { ...top[1], rank: 2 } : null,
+    top[0] ? { ...top[0], rank: 1 } : null,
+    top[2] ? { ...top[2], rank: 3 } : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="hero-podium">
+      {ordered.map((p) => (
+        <Link
+          key={p.playerId}
+          to={`/players/${p.playerId}`}
+          className={`hero-player hero-player--${p.rank}`}
+          title={p.playerName}
+        >
+          <span className="hero-player__rank">{rankMedal(p.rank)}</span>
+          <img
+            className="hero-player__body"
+            src={playerBody(p.playerId)}
+            alt={p.playerName}
+            loading="lazy"
+          />
+          <span className="hero-player__name">{p.playerName}</span>
+          <span className="hero-player__pts">+{p.totalPoints} pts</span>
+        </Link>
+      ))}
+    </div>
   );
 }
 

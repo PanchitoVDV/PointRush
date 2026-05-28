@@ -24,6 +24,11 @@ export function playerHead(uuid, size = 32) {
   return `https://minotar.net/avatar/${uuid}/${size}.png`;
 }
 
+export function playerBody(uuid) {
+  if (!uuid) return 'https://skins.mcstats.com/body/front/MHF_Steve';
+  return `https://skins.mcstats.com/body/front/${uuid}`;
+}
+
 export function formatDate(ms) {
   if (!ms) return '—';
   return new Date(ms).toLocaleString('nl-NL', {

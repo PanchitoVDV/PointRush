@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import McPanel from '../components/McPanel';
-import { EventCard, LoadingScreen, StatBlock, TeamBadge } from '../components/Ui';
+import { EventCard, HeroTopPlayers, LoadingScreen, StatBlock, TeamBadge } from '../components/Ui';
 import { formatPoints, playerHead, teamColor } from '../utils';
 
 export default function HomePage() {
@@ -30,12 +30,8 @@ export default function HomePage() {
             <Link to="/events" className="btn btn--ghost">Events</Link>
           </div>
         </div>
-        <div className="hero__scene" aria-hidden="true">
-          <div className="pixel-stack">
-            <div className="pixel-block pixel-block--grass" />
-            <div className="pixel-block pixel-block--diamond" />
-            <div className="pixel-block pixel-block--gold" />
-          </div>
+        <div className="hero__scene">
+          <HeroTopPlayers players={data.topPlayers} />
         </div>
       </section>
 

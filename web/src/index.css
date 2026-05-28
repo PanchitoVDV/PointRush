@@ -489,48 +489,87 @@ body {
 
 .hero__scene {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.5rem 1rem 0;
+  min-width: 220px;
 }
 
-.pixel-stack {
+.hero-podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.hero-player {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transform: rotate(-6deg);
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s;
+  position: relative;
 }
 
-.pixel-block {
-  width: 56px;
-  height: 56px;
-  border-radius: 4px;
+.hero-player:hover {
+  transform: translateY(-4px);
+}
+
+.hero-player__rank {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  line-height: 1;
+}
+
+.hero-player__body {
+  height: auto;
+  max-height: 110px;
+  width: auto;
   image-rendering: pixelated;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
 }
 
-.pixel-block--grass {
-  background:
-    linear-gradient(180deg, #5cb85c 0%, #5cb85c 22%, #3d8b3d 22%, #3d8b3d 100%);
-  border: 2px solid #2d6b2d;
+.hero-player--1 .hero-player__body {
+  max-height: 140px;
 }
 
-.pixel-block--diamond {
-  width: 48px;
-  height: 48px;
-  margin-left: 12px;
-  background:
-    linear-gradient(135deg, #5ee8e8 0%, #2a9d9d 50%, #1a7070 100%);
-  border: 2px solid #1a5050;
+.hero-player--2 .hero-player__body {
+  max-height: 105px;
+  opacity: 0.92;
 }
 
-.pixel-block--gold {
-  width: 40px;
-  height: 40px;
-  margin-left: 24px;
-  background:
-    linear-gradient(135deg, #ffe066 0%, #d4a020 100%);
-  border: 2px solid #a07010;
+.hero-player--3 .hero-player__body {
+  max-height: 95px;
+  opacity: 0.88;
+}
+
+.hero-player__name {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+  max-width: 72px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-player__pts {
+  font-size: 0.65rem;
+  color: var(--success);
+  font-weight: 600;
+  margin-top: 0.1rem;
+}
+
+.hero-player--1 {
+  z-index: 2;
+}
+
+.hero-player--1 .hero-player__name {
+  color: var(--accent-bright);
 }
 
 /* ─── Stats ─── */
@@ -1203,16 +1242,12 @@ body {
 
   .hero__scene {
     order: -1;
+    min-width: unset;
+    width: 100%;
   }
 
-  .pixel-stack {
-    flex-direction: row;
-    transform: none;
-  }
-
-  .pixel-block--diamond,
-  .pixel-block--gold {
-    margin-left: 0;
+  .hero-podium {
+    gap: 0.75rem;
   }
 
   .leaderboard-row {

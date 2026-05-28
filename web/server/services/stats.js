@@ -115,6 +115,7 @@ export function demoData() {
     players: [
       { playerId: '00000000-0000-0000-0000-000000000001', playerName: 'Steve', eventsPlayed: 12, wins: 4, podiums: 8, totalPoints: 680, bestRank: 1, eventTypes: ['parkour', 'race'] },
       { playerId: '00000000-0000-0000-0000-000000000003', playerName: 'Alex', eventsPlayed: 10, wins: 3, podiums: 6, totalPoints: 520, bestRank: 1, eventTypes: ['parkour', 'tnttag'] },
+      { playerId: '00000000-0000-0000-0000-000000000004', playerName: 'Notch', eventsPlayed: 8, wins: 2, podiums: 5, totalPoints: 410, bestRank: 1, eventTypes: ['tnttag'] },
     ],
   };
 }

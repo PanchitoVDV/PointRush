@@ -156,6 +156,7 @@ router.get('/stats/overview', async (_req, res) => {
       totalTeams: demo.teams.length,
       totalPlayers: demo.players.length,
       topTeam: demo.teams[0],
+      topPlayers: demo.players.slice(0, 3),
       recentEvents: demo.events,
       demo: true,
     });
@@ -163,20 +164,23 @@ router.get('/stats/overview', async (_req, res) => {
 
   try {
     const cols = collections();
-    const [totalEvents, totalTeams, recentDocs, topTeamDoc] = await Promise.all([
+    const [totalEvents, totalTeams, recentDocs, statsDocs, topTeamDoc] = await Promise.all([
       db.collection(cols.events).countDocuments(),
       db.collection(cols.teams).countDocuments(),
       db.collection(cols.events).find({}).sort({ ended: -1 }).limit(6).toArray(),
+      db.collection(cols.events).find({}).sort({ ended: -1 }).limit(500).toArray(),
       db.collection(cols.teams).find({}).sort({ points: -1 }).limit(1).next(),
     ]);
     const recentEvents = recentDocs.map(formatEvent);
-    const players = aggregatePlayerStats(recentEvents);
+    const allEvents = statsDocs.map(formatEvent);
+    const players = aggregatePlayerStats(allEvents);
 
     res.json({
       totalEvents,
       totalTeams,
       totalPlayers: players.length,
       topTeam: topTeamDoc ? formatTeam(topTeamDoc) : null,
+      topPlayers: players.slice(0, 3),
       recentEvents,
       demo: false,
     });
@@ -187,6 +191,7 @@ router.get('/stats/overview', async (_req, res) => {
       totalTeams: demo.teams.length,
       totalPlayers: demo.players.length,
       topTeam: demo.teams[0],
+      topPlayers: demo.players.slice(0, 3),
       recentEvents: demo.events,
       demo: true,
     });
