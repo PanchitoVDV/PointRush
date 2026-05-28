@@ -19,9 +19,9 @@ export default function PlayersPage() {
 
   return (
     <div className="page players-page">
-      <McPanel title="Speler Stats" icon="👤">
+      <McPanel title="Speler ranking" icon="👤">
         <p className="panel-desc">
-          Statistieken berekend uit event placements — wins, podiums en totale punten.
+          Statistieken per speler — wins, podiums en totale event punten.
         </p>
 
         {players.length === 0 ? (

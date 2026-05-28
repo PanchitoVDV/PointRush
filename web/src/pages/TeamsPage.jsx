@@ -19,7 +19,7 @@ export default function TeamsPage() {
 
   return (
     <div className="page teams-page">
-      <McPanel title="Team Leaderboard" icon="🏆">
+      <McPanel title="Team ranking" icon="🏆">
         <p className="panel-desc">Teams gerangschikt op totale punten — zelfde data als /points top in-game.</p>
 
         {teams.length === 0 ? (
