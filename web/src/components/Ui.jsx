@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { playerHead, playerBody, teamColor, formatDate, formatPoints, rankMedal } from '../utils';
+import { playerHead, playerBody, teamColor, teamAccent, formatDate, formatPoints, rankMedal } from '../utils';
 
 export function PlayerAvatar({ uuid, name, size = 40 }) {
   const height = Math.round(size * 1.35);
@@ -16,9 +16,14 @@ export function PlayerAvatar({ uuid, name, size = 40 }) {
 }
 
 export function TeamBadge({ name, color }) {
-  const hex = teamColor(color);
+  const accent = teamAccent(color);
+  const text = teamColor(color);
   return (
-    <span className="team-badge" style={{ color: hex, borderColor: hex }}>
+    <span
+      className="team-badge"
+      style={{ '--team-accent': accent, color: text }}
+    >
+      <span className="team-badge__dot" aria-hidden="true" />
       {name}
     </span>
   );
@@ -38,13 +43,13 @@ export function TeamPodium({ teams, maxPoints }) {
   return (
     <section className="team-podium">
       {ordered.map(({ team, rank }, i) => {
-        const hex = teamColor(team.color);
+        const accent = teamAccent(team.color);
         return (
           <div
             key={team.id}
             className={`team-podium__slot team-podium__slot--${rank}`}
             style={{
-              '--team-color': hex,
+              '--team-accent': accent,
               '--bar-pct': `${pct(team.points)}%`,
               '--anim-delay': `${i * 0.12}s`,
             }}
@@ -70,14 +75,14 @@ export function TeamPodium({ teams, maxPoints }) {
 }
 
 export function TeamRankRow({ team, rank, maxPoints }) {
-  const hex = teamColor(team.color);
+  const accent = teamAccent(team.color);
   const pct = Math.max(4, Math.round((team.points / (maxPoints || 1)) * 100));
   const isTop = rank <= 3;
 
   return (
     <div
       className={`team-row ${isTop ? 'team-row--top' : ''}`}
-      style={{ '--team-color': hex, '--bar-pct': `${pct}%`, '--anim-delay': `${Math.min(rank * 0.05, 0.5)}s` }}
+      style={{ '--team-accent': accent, '--bar-pct': `${pct}%`, '--anim-delay': `${Math.min(rank * 0.05, 0.5)}s` }}
     >
       <span className="team-row__rank">{isTop ? rankMedal(rank) : rank}</span>
       <div className="team-row__info">

@@ -19,6 +19,26 @@ export function teamColor(name) {
   return TEAM_COLORS[name.toLowerCase()] ?? '#FFFFFF';
 }
 
+/** Softer accent for borders/bars on dark UI (avoids harsh white lines). */
+export function teamAccent(name) {
+  const key = (name ?? 'white').toLowerCase();
+  const soft = {
+    white: '#A8B8CC',
+    yellow: '#C9B84A',
+    gold: '#C9922E',
+    gray: '#7A8494',
+    aqua: '#3DAFB8',
+    red: '#D85555',
+    green: '#45B845',
+    blue: '#5588DD',
+    light_purple: '#CC66CC',
+    dark_purple: '#9955AA',
+    dark_gray: '#5A6270',
+    black: '#4A5060',
+  };
+  return soft[key] ?? teamColor(name);
+}
+
 export function playerHead(uuid) {
   if (!uuid) return 'https://skins.mcstats.com/bust/MHF_Steve';
   return `https://skins.mcstats.com/bust/${uuid}`;
