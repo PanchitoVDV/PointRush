@@ -111,25 +111,31 @@ export function HeroTopPlayers({ players }) {
   ].filter(Boolean);
 
   return (
-    <div className="hero-podium">
-      {ordered.map((p) => (
-        <Link
-          key={p.playerId}
-          to={`/players/${p.playerId}`}
-          className={`hero-player hero-player--${p.rank}`}
-          title={p.playerName}
-        >
-          <span className="hero-player__rank">{rankMedal(p.rank)}</span>
-          <img
-            className="hero-player__body"
-            src={playerBody(p.playerId)}
-            alt={p.playerName}
-            loading="lazy"
-          />
-          <span className="hero-player__name">{p.playerName}</span>
-          <span className="hero-player__pts">+{p.totalPoints} pts</span>
-        </Link>
-      ))}
+    <div className="hero-ranking">
+      <div className="hero-ranking__head">
+        <span className="hero-ranking__label">Speler ranking</span>
+        <Link to="/players" className="hero-ranking__link">Volledig →</Link>
+      </div>
+      <div className="hero-podium">
+        {ordered.map((p) => (
+          <Link
+            key={p.playerId}
+            to={`/players/${p.playerId}`}
+            className={`hero-player hero-player--${p.rank}`}
+            title={p.playerName}
+          >
+            <span className="hero-player__rank">{rankMedal(p.rank)}</span>
+            <img
+              className="hero-player__body"
+              src={playerBody(p.playerId)}
+              alt={p.playerName}
+              loading="lazy"
+            />
+            <span className="hero-player__name">{p.playerName}</span>
+            <span className="hero-player__pts">+{p.totalPoints} pts</span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,7 @@ export default function HomePage() {
           </p>
           <div className="hero__actions">
             <Link to="/teams" className="btn btn--primary">Team ranking</Link>
+            <Link to="/players" className="btn btn--ghost">Speler ranking</Link>
             <Link to="/events" className="btn btn--ghost">Events</Link>
           </div>
         </div>
@@ -42,7 +43,8 @@ export default function HomePage() {
       </div>
 
       {data.topTeam && (
-        <McPanel title="Huidige kampioen" icon="♛" accent={teamColor(data.topTeam.color)}>
+        <McPanel title="Team ranking" icon="♛" accent={teamColor(data.topTeam.color)}>
+          <p className="panel-desc">Hoogst scorende team op de server.</p>
           <div className="champion-row">
             <img src={playerHead(data.topTeam.leader, 64)} alt="" className="player-head big" />
             <div>

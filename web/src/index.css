@@ -492,7 +492,44 @@ body {
   align-items: flex-end;
   justify-content: center;
   padding: 0.5rem 1rem 0;
-  min-width: 220px;
+  min-width: 240px;
+}
+
+.hero-ranking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.hero-ranking__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 280px;
+  padding: 0 0.25rem;
+}
+
+.hero-ranking__label {
+  font-family: var(--pixel-font);
+  font-size: 0.48rem;
+  color: var(--accent-bright);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+.hero-ranking__link {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.hero-ranking__link:hover {
+  color: var(--accent);
 }
 
 .hero-podium {
