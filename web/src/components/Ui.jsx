@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { playerHead, playerBody, teamColor, formatDate, rankMedal } from '../utils';
+import { playerHead, playerBody, teamColor, formatDate, formatPoints, rankMedal } from '../utils';
 
 export function PlayerAvatar({ uuid, name, size = 40 }) {
   return (
@@ -17,9 +17,86 @@ export function PlayerAvatar({ uuid, name, size = 40 }) {
 export function TeamBadge({ name, color }) {
   const hex = teamColor(color);
   return (
-    <span className="team-badge" style={{ color: hex, borderColor: hex, textShadow: `0 0 8px ${hex}55` }}>
+    <span className="team-badge" style={{ color: hex, borderColor: hex }}>
       {name}
     </span>
+  );
+}
+
+export function TeamPodium({ teams, maxPoints }) {
+  if (!teams?.length) return null;
+
+  const ordered = [
+    teams[1] ? { team: teams[1], rank: 2 } : null,
+    teams[0] ? { team: teams[0], rank: 1 } : null,
+    teams[2] ? { team: teams[2], rank: 3 } : null,
+  ].filter(Boolean);
+
+  const pct = (pts) => Math.max(8, Math.round((pts / (maxPoints || 1)) * 100));
+
+  return (
+    <section className="team-podium">
+      {ordered.map(({ team, rank }, i) => {
+        const hex = teamColor(team.color);
+        return (
+          <div
+            key={team.id}
+            className={`team-podium__slot team-podium__slot--${rank}`}
+            style={{
+              '--team-color': hex,
+              '--bar-pct': `${pct(team.points)}%`,
+              '--anim-delay': `${i * 0.12}s`,
+            }}
+          >
+            <span className="team-podium__rank">{rankMedal(rank)}</span>
+            <div className="team-podium__avatars">
+              {(team.members ?? []).slice(0, 4).map((uuid) => (
+                <Link key={uuid} to={`/players/${uuid}`}>
+                  <PlayerAvatar uuid={uuid} size={rank === 1 ? 36 : 30} />
+                </Link>
+              ))}
+            </div>
+            <TeamBadge name={team.name} color={team.color} />
+            <span className="team-podium__pts">{formatPoints(team.points)}</span>
+            <div className="team-podium__bar">
+              <div className="team-podium__bar-fill" />
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+export function TeamRankRow({ team, rank, maxPoints }) {
+  const hex = teamColor(team.color);
+  const pct = Math.max(4, Math.round((team.points / (maxPoints || 1)) * 100));
+  const isTop = rank <= 3;
+
+  return (
+    <div
+      className={`team-row ${isTop ? 'team-row--top' : ''}`}
+      style={{ '--team-color': hex, '--bar-pct': `${pct}%`, '--anim-delay': `${Math.min(rank * 0.05, 0.5)}s` }}
+    >
+      <span className="team-row__rank">{isTop ? rankMedal(rank) : rank}</span>
+      <div className="team-row__info">
+        <div className="team-row__head">
+          <TeamBadge name={team.name} color={team.color} />
+          <span className="team-row__members">{team.memberCount} speler{team.memberCount !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="team-row__bar">
+          <div className="team-row__bar-fill" />
+        </div>
+      </div>
+      <div className="team-row__heads">
+        {(team.members ?? []).slice(0, 4).map((uuid) => (
+          <Link key={uuid} to={`/players/${uuid}`} title="Speler profiel">
+            <PlayerAvatar uuid={uuid} size={28} />
+          </Link>
+        ))}
+      </div>
+      <span className="team-row__pts">{formatPoints(team.points)}</span>
+    </div>
   );
 }
 

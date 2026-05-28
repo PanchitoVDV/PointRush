@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import McPanel from '../components/McPanel';
-import { LoadingScreen, PlayerAvatar, TeamBadge } from '../components/Ui';
-import { formatPoints, playerHead, rankMedal, teamColor } from '../utils';
+import { LoadingScreen, TeamPodium, TeamRankRow } from '../components/Ui';
+import { formatPoints } from '../utils';
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);
@@ -17,49 +16,59 @@ export default function TeamsPage() {
 
   if (loading) return <LoadingScreen />;
 
+  const maxPoints = teams[0]?.points ?? 1;
+  const totalPoints = teams.reduce((sum, t) => sum + (t.points ?? 0), 0);
+
   return (
     <div className="page teams-page">
-      <McPanel title="Team ranking" icon="🏆">
-        <p className="panel-desc">Teams gerangschikt op totale punten — zelfde data als /points top in-game.</p>
+      <header className="teams-page__header">
+        <div>
+          <p className="teams-page__eyebrow">CoreSMP · PointRush</p>
+          <h1 className="teams-page__title">Team ranking</h1>
+        </div>
+        <div className="teams-page__stats">
+          <div className="teams-page__stat">
+            <span className="teams-page__stat-value">{teams.length}</span>
+            <span className="teams-page__stat-label">Teams</span>
+          </div>
+          <div className="teams-page__stat">
+            <span className="teams-page__stat-value">{formatPoints(totalPoints)}</span>
+            <span className="teams-page__stat-label">Punten totaal</span>
+          </div>
+        </div>
+      </header>
 
-        {teams.length === 0 ? (
+      {teams.length === 0 ? (
+        <McPanel title="Geen teams">
           <p className="empty">Nog geen teams gevonden.</p>
-        ) : (
-          <div className="leaderboard">
-            {teams.map((team, i) => (
-              <div
-                key={team.id}
-                className={`leaderboard-row rank-${i + 1}`}
-                style={{ '--team-color': teamColor(team.color) }}
-              >
-                <span className="lb-rank">{rankMedal(i + 1)}</span>
-                <div className="lb-team">
-                  <TeamBadge name={team.name} color={team.color} />
-                  <span className="lb-members">{team.memberCount} speler(s)</span>
-                </div>
-                <div className="lb-members-heads">
-                  {(team.members ?? []).slice(0, 4).map((uuid) => (
-                    <Link key={uuid} to={`/players/${uuid}`} title="Speler profiel">
-                      <PlayerAvatar uuid={uuid} size={32} />
-                    </Link>
-                  ))}
-                </div>
-                <span className="lb-points">{formatPoints(team.points)} pts</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </McPanel>
+        </McPanel>
+      ) : (
+        <>
+          <TeamPodium teams={teams.slice(0, 3)} maxPoints={maxPoints} />
 
-      <div className="podium-visual mc-panel">
-        {teams.slice(0, 3).map((team, i) => (
-          <div key={team.id} className={`podium-place place-${i + 1}`}>
-            <img src={playerHead(team.leader, 48)} alt="" className="player-head" />
-            <TeamBadge name={team.name} color={team.color} />
-            <span>{formatPoints(team.points)}</span>
-          </div>
-        ))}
-      </div>
+          <McPanel title="Alle teams">
+            <p className="panel-desc">
+              Live vanuit de server — zelfde data als <code>/points top</code>.
+            </p>
+            <div className="team-rank-list">
+              <div className="team-rank-list__head">
+                <span>#</span>
+                <span>Team</span>
+                <span>Leden</span>
+                <span>Punten</span>
+              </div>
+              {teams.map((team, i) => (
+                <TeamRankRow
+                  key={team.id}
+                  team={team}
+                  rank={i + 1}
+                  maxPoints={maxPoints}
+                />
+              ))}
+            </div>
+          </McPanel>
+        </>
+      )}
     </div>
   );
 }
