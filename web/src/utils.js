@@ -19,9 +19,9 @@ export function teamColor(name) {
   return TEAM_COLORS[name.toLowerCase()] ?? '#FFFFFF';
 }
 
-export function playerHead(uuid, size = 32) {
-  if (!uuid) return `https://minotar.net/avatar/Steve/${size}.png`;
-  return `https://minotar.net/avatar/${uuid}/${size}.png`;
+export function playerHead(uuid) {
+  if (!uuid) return 'https://skins.mcstats.com/bust/MHF_Steve';
+  return `https://skins.mcstats.com/bust/${uuid}`;
 }
 
 export function playerBody(uuid) {

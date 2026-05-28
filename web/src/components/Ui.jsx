@@ -2,13 +2,14 @@ import { Link } from 'react-router-dom';
 import { playerHead, playerBody, teamColor, formatDate, formatPoints, rankMedal } from '../utils';
 
 export function PlayerAvatar({ uuid, name, size = 40 }) {
+  const height = Math.round(size * 1.35);
   return (
     <img
       className="player-head"
-      src={playerHead(uuid, size)}
+      src={playerHead(uuid)}
       alt={name ?? 'Speler'}
       width={size}
-      height={size}
+      height={height}
       loading="lazy"
     />
   );

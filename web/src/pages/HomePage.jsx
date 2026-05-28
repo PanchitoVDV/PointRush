@@ -46,7 +46,7 @@ export default function HomePage() {
         <McPanel title="Team ranking" icon="♛" accent={teamColor(data.topTeam.color)}>
           <p className="panel-desc">Hoogst scorende team op de server.</p>
           <div className="champion-row">
-            <img src={playerHead(data.topTeam.leader, 64)} alt="" className="player-head big" />
+            <img src={playerHead(data.topTeam.leader)} alt="" className="player-head big" />
             <div>
               <TeamBadge name={data.topTeam.name} color={data.topTeam.color} />
               <p className="champion-points">{formatPoints(data.topTeam.points)} punten</p>
