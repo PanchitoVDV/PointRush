@@ -1,0 +1,34 @@
+Crown Cosmetic Set — Nexo installatie
+=====================================
+
+Bron: EliteCreatures Crown Cosmetic Set (ItemsAdder/CosmeticsCore pack)
+
+1. Kopieer de inhoud van deze map naar je server:
+
+   nexo-import/crown_set/items/     -> plugins/Nexo/items/
+   nexo-import/crown_set/pack/      -> plugins/Nexo/pack/   (merge, niet overschrijven)
+
+2. Herlaad Nexo en genereer het resource pack opnieuw:
+
+   /nexo reload
+   /nexo pack upload   (of jouw gebruikelijke pack-commando)
+
+3. Geef items aan spelers:
+
+   /nexo give <speler> crown_set_crown_1
+   /nexo give <speler> crown_set_crown_2
+   /nexo give <speler> crown_set_crown_3
+   /nexo give <speler> crown_set_crown_4
+   /nexo give <speler> crown_set_crown_5
+   /nexo give <speler> crown_set_sceptre
+
+4. Kroon dragen: zet het item in de helm-slot (of shift-klik vanuit inventory).
+   Sceptre: houd in main/off hand.
+
+Item IDs (voor shop/plugins):
+  crown_set_crown_1 .. crown_set_crown_5
+  crown_set_sceptre
+
+Vereisten:
+  - Nexo 1.17+ (ItemModels)
+  - Minecraft/Paper 1.21.2+ aanbevolen (equippable HEAD + 3D modellen)

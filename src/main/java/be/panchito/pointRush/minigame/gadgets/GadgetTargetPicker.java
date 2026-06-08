@@ -49,7 +49,6 @@ final class GadgetTargetPicker {
             }
         }
         if (bestFacing != null) return bestFacing;
-        if (closest != null && closestDistSq <= 6.0 * 6.0) return closest;
-        return null;
+        return closest;
     }
 }

@@ -3,10 +3,12 @@ package be.panchito.pointRush.minigame;
 import be.panchito.pointRush.PointRush;
 import be.panchito.pointRush.minigame.bingo.BingoGame;
 import be.panchito.pointRush.minigame.boatrace.BoatRaceGame;
+import be.panchito.pointRush.minigame.boss.BossEventGame;
 import be.panchito.pointRush.minigame.ctf.CtfGame;
 import be.panchito.pointRush.minigame.floorislava.FloorIsLavaGame;
 import be.panchito.pointRush.minigame.goldrush.GoldRushGame;
 import be.panchito.pointRush.minigame.hiddentarget.HiddenTargetGame;
+import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownGame;
 import be.panchito.pointRush.minigame.koth.KothGame;
 import be.panchito.pointRush.minigame.parkour.ParkourGame;
 import be.panchito.pointRush.minigame.race.RaceGame;
@@ -43,6 +45,9 @@ public final class MinigameRegistry {
         EVENTS.put("goldrush", "Gold Rush");
         EVENTS.put("hiddentarget", "Hidden Target");
         EVENTS.put("ctf", "Capture the Flag");
+        EVENTS.put("holdthecrown", "Hold the Crown");
+        EVENTS.put("bossevent", "Boss Event");
+
     }
 
     private MinigameRegistry() {
@@ -72,7 +77,30 @@ public final class MinigameRegistry {
                 || isActive(plugin.getTreasureHuntGame(), TreasureHuntGame.State.IDLE)
                 || isActive(plugin.getGoldRushGame(), GoldRushGame.State.IDLE)
                 || isActive(plugin.getHiddenTargetGame(), HiddenTargetGame.State.IDLE)
-                || isActive(plugin.getCtfGame(), CtfGame.State.IDLE);
+                || isActive(plugin.getCtfGame(), CtfGame.State.IDLE)
+                || isActive(plugin.getHoldTheCrownGame(), HoldTheCrownGame.State.IDLE)
+                || isActive(plugin.getBossEventGame(), BossEventGame.State.IDLE);
+    }
+
+    /**
+     * Returns the id of the first non-idle minigame, or {@code null} when none is active.
+     */
+    public static String activeMinigameId(PointRush plugin) {
+        if (isActive(plugin.getParkourGame(), ParkourGame.State.IDLE)) return "parkour";
+        if (isActive(plugin.getTntTagGame(), TntTagGame.State.IDLE)) return "tnttag";
+        if (isActive(plugin.getTntRunGame(), TntRunGame.State.IDLE)) return "tntrun";
+        if (isActive(plugin.getRaceGame(), RaceGame.State.IDLE)) return "race";
+        if (isActive(plugin.getBoatRaceGame(), BoatRaceGame.State.IDLE)) return "boatrace";
+        if (isActive(plugin.getBingoGame(), BingoGame.State.IDLE)) return "bingo";
+        if (isActive(plugin.getKothGame(), KothGame.State.IDLE)) return "koth";
+        if (isActive(plugin.getFloorIsLavaGame(), FloorIsLavaGame.State.IDLE)) return "floorislava";
+        if (isActive(plugin.getTreasureHuntGame(), TreasureHuntGame.State.IDLE)) return "treasurehunt";
+        if (isActive(plugin.getGoldRushGame(), GoldRushGame.State.IDLE)) return "goldrush";
+        if (isActive(plugin.getHiddenTargetGame(), HiddenTargetGame.State.IDLE)) return "hiddentarget";
+        if (isActive(plugin.getCtfGame(), CtfGame.State.IDLE)) return "ctf";
+        if (isActive(plugin.getHoldTheCrownGame(), HoldTheCrownGame.State.IDLE)) return "holdthecrown";
+        if (isActive(plugin.getBossEventGame(), BossEventGame.State.IDLE)) return "bossevent";
+        return null;
     }
 
     /**
@@ -88,7 +116,9 @@ public final class MinigameRegistry {
                 || participant(plugin.getKothGame(), playerId)
                 || participant(plugin.getFloorIsLavaGame(), playerId)
                 || participant(plugin.getHiddenTargetGame(), playerId)
-                || participant(plugin.getCtfGame(), playerId);
+                || participant(plugin.getCtfGame(), playerId)
+                || participant(plugin.getHoldTheCrownGame(), playerId)
+                || participant(plugin.getBossEventGame(), playerId);
     }
 
     /**
@@ -132,6 +162,12 @@ public final class MinigameRegistry {
         list.add(candidate("ctf", plugin.getCtfConfig().isReady(),
                 () -> plugin.getCtfGame().getState() == CtfGame.State.IDLE,
                 () -> plugin.getCtfGame().start()));
+        list.add(candidate("holdthecrown", plugin.getHoldTheCrownConfig().isReady(),
+                () -> plugin.getHoldTheCrownGame().getState() == HoldTheCrownGame.State.IDLE,
+                () -> plugin.getHoldTheCrownGame().start()));
+        list.add(candidate("bossevent", plugin.getBossEventConfig().isReady(),
+                () -> plugin.getBossEventGame().getState() == BossEventGame.State.IDLE,
+                () -> plugin.getBossEventGame().start()));
         return list;
     }
 
@@ -182,6 +218,8 @@ public final class MinigameRegistry {
             case GoldRushGame g -> g.getState();
             case HiddenTargetGame g -> g.getState();
             case CtfGame g -> g.getState();
+            case HoldTheCrownGame g -> g.getState();
+            case BossEventGame g -> g.getState();
             default -> null;
         };
         return state != idleState;
@@ -200,6 +238,8 @@ public final class MinigameRegistry {
             case FloorIsLavaGame g -> g.isParticipant(playerId);
             case HiddenTargetGame g -> g.isParticipant(playerId);
             case CtfGame g -> g.isParticipant(playerId);
+            case HoldTheCrownGame g -> g.isParticipant(playerId);
+            case BossEventGame g -> g.isParticipant(playerId);
             default -> false;
         };
     }

@@ -1,6 +1,10 @@
 package be.panchito.pointRush.minigame.bingo;
 
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Vehicle;
+import org.bukkit.event.player.PlayerMoveEvent;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,12 +35,14 @@ public final class BingoCard {
         for (int i = 0; i < BingoGrid.TOTAL; i++) {
             if (i == BingoGrid.FREE_INDEX) {
                 tiles[i] = Material.LIME_WOOL;
-            } else {
-                tiles[i] = shuffled.get(pick++);
+                continue;
             }
+            tiles[i] = shuffled.get(pick++);
         }
         return new BingoCard(tiles);
     }
+
+    
 
     public Material[] copyTiles() {
         Material[] copy = new Material[BingoGrid.TOTAL];

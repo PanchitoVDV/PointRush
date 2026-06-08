@@ -1,12 +1,15 @@
 package be.panchito.pointRush.minigame.floorislava;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.MinigameText;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
@@ -24,6 +27,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -50,6 +54,8 @@ public final class FloorIsLavaGame {
 
     public static final int COUNTDOWN_SECONDS = 10;
     public static final long EVENT_TIMEOUT_TICKS = 45L * 60L * 20L;
+    /** Max aantal lava-blokken dat per tick wordt geplaatst bij een stijging (spreidt grote arena's). */
+    private static final int LAVA_BLOCKS_PER_TICK = 2000;
 
     private final PointRush plugin;
     private final FloorIsLavaConfig config;
@@ -158,6 +164,9 @@ public final class FloorIsLavaGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan Floor is Lava (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -176,6 +185,7 @@ public final class FloorIsLavaGame {
         playSoundAll(Sound.BLOCK_LAVA_POP, 0.6f, 1.0f);
         startCountdown();
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -228,20 +238,13 @@ public final class FloorIsLavaGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
         FloorIsLavaPlayerState ps = new FloorIsLavaPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
 
-        player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -250,10 +253,10 @@ public final class FloorIsLavaGame {
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         scoreboard.attach(player);
-        player.sendMessage(Messages.info("Floor is Lava start binnenkort — elke 30s krijg je een random item!"));
+        player.sendMessage(Messages.info("Floor is Lava start binnenkort — bouwblokken (max 3 per soort), zelden knock-items!"));
     }
 
     private void startCountdown() {
@@ -352,22 +355,65 @@ public final class FloorIsLavaGame {
             Player p = Bukkit.getPlayer(ps.getUuid());
             if (p == null) continue;
 
-            FloorIsLavaKit.Roll roll = FloorIsLavaKit.randomRoll();
-            giveItem(p, roll.item());
+            FloorIsLavaKit.Roll delivered = null;
+            for (int attempt = 0; attempt < 12; attempt++) {
+                FloorIsLavaKit.Roll roll = FloorIsLavaKit.randomRoll();
+                if (tryGiveItem(p, roll)) {
+                    delivered = roll;
+                    break;
+                }
+            }
+            if (delivered == null) {
+                p.sendActionBar(Messages.warn("Inventaris vol voor nieuwe blokken (max 3 per soort)"));
+                continue;
+            }
 
-            NamedTextColor color = roll.type() == FloorIsLavaKit.Type.BUILD
-                    ? NamedTextColor.GREEN : NamedTextColor.RED;
+            NamedTextColor color = switch (delivered.type()) {
+                case BUILD -> NamedTextColor.GREEN;
+                case KNOCK -> NamedTextColor.RED;
+                case GADGET -> NamedTextColor.AQUA;
+            };
             p.sendActionBar(Component.text()
                     .append(Component.text(SmallText.of("kit: "), NamedTextColor.GRAY))
-                    .append(Component.text(SmallText.of(roll.label()), color, TextDecoration.BOLD))
+                    .append(Component.text(SmallText.of(delivered.label()), color, TextDecoration.BOLD))
                     .build());
             p.playSound(p.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8f, 1.2f);
         }
         playSoundAll(Sound.BLOCK_CHEST_OPEN, 0.5f, 1.4f);
     }
 
+    /**
+     * Geeft items aan de speler met cap: max {@link FloorIsLavaKit#MAX_BLOCKS_PER_TYPE} per
+     * bloksoort, max {@link FloorIsLavaKit#MAX_UTIL_PER_TYPE} voor knock-items.
+     *
+     * @return true als er minstens één item is toegevoegd
+     */
+    private boolean tryGiveItem(Player player, FloorIsLavaKit.Roll roll) {
+        ItemStack item = roll.item().clone();
+        Material material = item.getType();
+        int maxAllowed = FloorIsLavaKit.maxAllowed(material, roll.type());
+        int already = countMaterial(player, material);
+        int space = maxAllowed - already;
+        if (space <= 0) {
+            return false;
+        }
+        item.setAmount(Math.min(item.getAmount(), space));
+        giveItem(player, item);
+        return true;
+    }
+
+    private static int countMaterial(Player player, Material material) {
+        int total = 0;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (stack == null || stack.getType() != material) continue;
+            total += stack.getAmount();
+        }
+        return total;
+    }
+
     private void giveItem(Player player, ItemStack item) {
-        Map<Integer, ItemStack> leftover = player.getInventory().addItem(item.clone());
+        if (item.getAmount() <= 0) return;
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(item);
         if (!leftover.isEmpty() && config.getSpawn() != null) {
             for (ItemStack stack : leftover.values()) {
                 player.getWorld().dropItemNaturally(player.getLocation(), stack);
@@ -386,25 +432,53 @@ public final class FloorIsLavaGame {
         int maxX = max.getBlockX();
         int minZ = min.getBlockZ();
         int maxZ = max.getBlockZ();
+        int layerY = currentLavaY;
 
-        for (int x = minX; x <= maxX; x++) {
-            for (int z = minZ; z <= maxZ; z++) {
-                Block block = world.getBlockAt(x, currentLavaY, z);
-                if (block.getType() == Material.LAVA) continue;
-                recordLavaBlock(block);
-                block.setType(Material.LAVA, false);
-                playerPlacedBlocks.remove(block);
-            }
-        }
-
+        // Waarschuwing meteen (geluid/particles/actionbar) zodra de laag begint te stijgen.
         Location center = new Location(world,
                 (minX + maxX) / 2.0 + 0.5,
-                currentLavaY + 0.5,
+                layerY + 0.5,
                 (minZ + maxZ) / 2.0 + 0.5);
         world.spawnParticle(Particle.LAVA, center, 40, (maxX - minX) / 2.0, 0.3, (maxZ - minZ) / 2.0, 0.02);
         world.playSound(center, Sound.BLOCK_LAVA_POP, 1.0f, 0.7f);
-        broadcastActionBar("lava stijgt · y=" + currentLavaY);
+        broadcastActionBar("lava stijgt · y=" + layerY);
 
+        // Plaats de laag gespreid over ticks (max LAVA_BLOCKS_PER_TICK per tick) zodat grote arena's
+        // geen lag-spike geven. De volledige laag staat binnen een fractie van een seconde.
+        new BukkitRunnable() {
+            int x = minX;
+            int z = minZ;
+
+            @Override
+            public void run() {
+                if (state != State.RUNNING || layerY != currentLavaY) {
+                    cancel();
+                    return;
+                }
+                int placed = 0;
+                while (placed < LAVA_BLOCKS_PER_TICK) {
+                    Block block = world.getBlockAt(x, layerY, z);
+                    if (block.getType() != Material.LAVA) {
+                        recordLavaBlock(block);
+                        block.setType(Material.LAVA, false);
+                        playerPlacedBlocks.remove(block);
+                    }
+                    placed++;
+                    if (++z > maxZ) {
+                        z = minZ;
+                        if (++x > maxX) {
+                            eliminatePlayersInLava();
+                            cancel();
+                            return;
+                        }
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    /** Elimineert levende spelers die na het plaatsen van een lava-laag in lava staan. */
+    private void eliminatePlayersInLava() {
         for (FloorIsLavaPlayerState ps : players.values()) {
             if (!ps.isAlive()) continue;
             Player p = Bukkit.getPlayer(ps.getUuid());
@@ -445,6 +519,10 @@ public final class FloorIsLavaGame {
     }
 
     public void eliminate(Player player) {
+        // Zodra checkWinCondition() een winnaar heeft aangewezen wisselt state naar STARTING; verdere
+        // eliminaties in dezelfde lava-tick mogen de winnaar dan niet alsnog wegstrepen (anders dubbele
+        // punten + "gelijkspel" over de winnaar heen).
+        if (state != State.RUNNING) return;
         FloorIsLavaPlayerState ps = players.get(player.getUniqueId());
         if (ps == null || !ps.isAlive()) return;
 
@@ -471,7 +549,7 @@ public final class FloorIsLavaGame {
         ));
         if (config.getSpawn() != null) {
             try {
-                player.teleport(config.getSpawn());
+                plugin.getTeleporter().teleport(player, config.getSpawn());
             } catch (Exception ignored) {
             }
         }
@@ -666,18 +744,9 @@ public final class FloorIsLavaGame {
     }
 
     private void restorePlayer(Player player, FloorIsLavaPlayerState ps, boolean teleport) {
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try {
-                player.setSpectatorTarget(null);
-            } catch (Throwable ignored) {
-            }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
         player.setFireTicks(0);
         player.setFallDistance(0f);
@@ -686,7 +755,7 @@ public final class FloorIsLavaGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

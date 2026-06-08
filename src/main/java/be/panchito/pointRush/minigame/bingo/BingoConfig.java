@@ -28,6 +28,14 @@ public final class BingoConfig {
     private final UnifiedSettings unified;
 
     private Location spawn;
+    private boolean hasSpawn = false;
+    private String spawnWorld;
+    private double spawnX;
+    private double spawnY;
+    private double spawnZ;
+    private float spawnYaw;
+    private float spawnPitch;
+    private boolean spawnWorldWarned = false;
     private int durationMinutes = DEFAULT_DURATION_MINUTES;
     private List<Material> materialPool = BingoMaterialPool.defaultPoolCopy();
 
@@ -38,6 +46,9 @@ public final class BingoConfig {
 
     public void load() {
         spawn = null;
+        hasSpawn = false;
+        spawnWorld = null;
+        spawnWorldWarned = false;
         durationMinutes = DEFAULT_DURATION_MINUTES;
         materialPool = BingoMaterialPool.defaultPoolCopy();
 
@@ -45,7 +56,7 @@ public final class BingoConfig {
         if (cfg.getConfigurationSection(KEY) == null) {
             return;
         }
-        spawn = loadLocation(cfg, KEY + ".spawn");
+        loadSpawnRaw(cfg, KEY + ".spawn");
         if (cfg.isSet(KEY + ".durationMinutes")) {
             durationMinutes = Math.max(5, cfg.getInt(KEY + ".durationMinutes"));
         }
@@ -57,8 +68,13 @@ public final class BingoConfig {
     public void save() {
         YamlConfiguration cfg = unified.yaml();
         cfg.set(KEY + ".spawn", null);
-        if (spawn != null) {
-            saveLocation(cfg, KEY + ".spawn", spawn);
+        if (hasSpawn && spawnWorld != null) {
+            cfg.set(KEY + ".spawn.world", spawnWorld);
+            cfg.set(KEY + ".spawn.x", spawnX);
+            cfg.set(KEY + ".spawn.y", spawnY);
+            cfg.set(KEY + ".spawn.z", spawnZ);
+            cfg.set(KEY + ".spawn.yaw", spawnYaw);
+            cfg.set(KEY + ".spawn.pitch", spawnPitch);
         }
         cfg.set(KEY + ".durationMinutes", durationMinutes);
         cfg.set(KEY + ".material-pool", BingoMaterialPool.toYamlNames(materialPool));
@@ -71,39 +87,53 @@ public final class BingoConfig {
         }
     }
 
-    private Location loadLocation(YamlConfiguration cfg, String path) {
+    private void loadSpawnRaw(YamlConfiguration cfg, String path) {
         ConfigurationSection sec = cfg.getConfigurationSection(path);
-        if (sec == null) return null;
+        if (sec == null) return;
         String worldName = sec.getString("world");
-        if (worldName == null) return null;
-        World world = Bukkit.getWorld(worldName);
-        if (world == null) return null;
-        return new Location(
-                world,
-                sec.getDouble("x"),
-                sec.getDouble("y"),
-                sec.getDouble("z"),
-                (float) sec.getDouble("yaw"),
-                (float) sec.getDouble("pitch")
-        );
+        if (worldName == null) return;
+        spawnWorld = worldName;
+        spawnX = sec.getDouble("x");
+        spawnY = sec.getDouble("y");
+        spawnZ = sec.getDouble("z");
+        spawnYaw = (float) sec.getDouble("yaw");
+        spawnPitch = (float) sec.getDouble("pitch");
+        hasSpawn = true;
     }
 
-    private void saveLocation(YamlConfiguration cfg, String path, Location loc) {
-        if (loc.getWorld() == null) return;
-        cfg.set(path + ".world", loc.getWorld().getName());
-        cfg.set(path + ".x", loc.getX());
-        cfg.set(path + ".y", loc.getY());
-        cfg.set(path + ".z", loc.getZ());
-        cfg.set(path + ".yaw", loc.getYaw());
-        cfg.set(path + ".pitch", loc.getPitch());
-    }
-
+    /**
+     * Resolvet de spawn lui: de wereld kan later geladen zijn (bv. via Multiverse) dan deze plugin.
+     */
     public Location getSpawn() {
+        if (!hasSpawn || spawnWorld == null) {
+            return null;
+        }
+        if (spawn != null) {
+            return spawn;
+        }
+        World world = Bukkit.getWorld(spawnWorld);
+        if (world == null) {
+            if (!spawnWorldWarned) {
+                spawnWorldWarned = true;
+                plugin.getLogger().warning("Bingo spawn-wereld '" + spawnWorld
+                        + "' is (nog) niet geladen; teleport wordt overgeslagen.");
+            }
+            return null;
+        }
+        spawn = new Location(world, spawnX, spawnY, spawnZ, spawnYaw, spawnPitch);
         return spawn;
     }
 
-    public void setSpawn(Location spawn) {
-        this.spawn = spawn.clone();
+    public void setSpawn(Location loc) {
+        this.spawn = loc.clone();
+        this.spawnWorld = loc.getWorld() != null ? loc.getWorld().getName() : null;
+        this.spawnX = loc.getX();
+        this.spawnY = loc.getY();
+        this.spawnZ = loc.getZ();
+        this.spawnYaw = loc.getYaw();
+        this.spawnPitch = loc.getPitch();
+        this.hasSpawn = this.spawnWorld != null;
+        this.spawnWorldWarned = false;
         save();
     }
 

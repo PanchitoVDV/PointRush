@@ -7,6 +7,7 @@ authors: [ Panchito ]
 description: Plugin van cloudito.cloud
 website: cloudito.cloud
 depend: [ MTVehicles, Nexo ]
+softdepend: [ MythicMobs, PlaceholderAPI, UltimateUI, Multiverse-Core ]
 
 commands:
   team:
@@ -65,6 +66,14 @@ commands:
     description: Capture the Flag — vlag pakken en afleveren.
     usage: /ctf help
     aliases: [ capturetheflag, vlag ]
+  holdthecrown:
+    description: Hold the Crown — rood vs blauw, pak de kroon in het midden.
+    usage: /holdthecrown help
+    aliases: [ crown, htc ]
+  bossevent:
+    description: Boss Event — MythicMobs arena-rondes + finaalronde.
+    usage: /bossevent help
+    aliases: [ boss, be ]
   randomevent:
     description: Draai het random event-rad en kies morgen's minigame.
     usage: /randomevent
@@ -77,6 +86,10 @@ commands:
     description: Bekijk PointRush events en hun geschiedenis.
     usage: /pointrush
     aliases: [ pr, events ]
+  prwebsite:
+    description: Stuurt een klikbare link naar de PointRush-website (profielmenu).
+    usage: /prwebsite
+    aliases: [ pointrushwebsite, prsite ]
   coins:
     description: Je Rush-munten (GUI) — CoreSMP PointRush events.
     usage: /coins help
@@ -89,6 +102,10 @@ commands:
     description: Zet je live stream op de PointRush website (streamers).
     usage: /live <twitch|youtube|tiktok> <link>
     aliases: [ stream, golive ]
+  dimension:
+    description: Schakel de Nether en de End in of uit.
+    usage: /dimension <nether|end> <aan|uit>
+    aliases: [ dim, dimensions ]
 
 permissions:
   pointrush.team.use:
@@ -172,6 +189,18 @@ permissions:
   pointrush.ctf.admin:
     description: Mag CTF setup beheren en events starten/stoppen.
     default: op
+  pointrush.holdthecrown.use:
+    description: Toegang tot /holdthecrown info en /holdthecrown leave.
+    default: true
+  pointrush.holdthecrown.admin:
+    description: Mag Hold the Crown setup beheren en events starten/stoppen.
+    default: op
+  pointrush.bossevent.use:
+    description: Toegang tot /bossevent info en /bossevent leave.
+    default: true
+  pointrush.bossevent.admin:
+    description: Mag Boss Event setup beheren en events starten/stoppen.
+    default: op
   pointrush.randomevent.admin:
     description: Mag /randomevent gebruiken om morgen's minigame te kiezen.
     default: op
@@ -180,6 +209,9 @@ permissions:
     default: op
   pointrush.use:
     description: Toegang tot het /pointrush commando (events + history).
+    default: true
+  pointrush.profile.website:
+    description: Website-link uit het profielmenu (/prwebsite).
     default: true
   pointrush.coins.use:
     description: Rush-muntmenu (/coins) en tekst-overzicht (/coins info).
@@ -192,6 +224,12 @@ permissions:
     default: true
   pointrush.streamer:
     description: Mag /live gebruiken om op de website te verschijnen als streamer.
+    default: op
+  pointrush.dimension.admin:
+    description: Mag de Nether en de End in-/uitschakelen (/dimension).
+    default: op
+  pointrush.spectator.bypass:
+    description: Wordt buiten events niet automatisch uit spectator gehaald (staff).
     default: op
   pointrush.admin:
     description: Volledige PointRush admin rechten.
@@ -224,6 +262,10 @@ permissions:
       pointrush.hiddentarget.admin: true
       pointrush.ctf.use: true
       pointrush.ctf.admin: true
+      pointrush.holdthecrown.use: true
+      pointrush.holdthecrown.admin: true
+      pointrush.bossevent.use: true
+      pointrush.bossevent.admin: true
       pointrush.randomevent.admin: true
       pointrush.event.admin: true
       pointrush.use: true
@@ -231,3 +273,5 @@ permissions:
       pointrush.coins.admin: true
       pointrush.shop.use: true
       pointrush.streamer: true
+      pointrush.dimension.admin: true
+      pointrush.spectator.bypass: true

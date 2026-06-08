@@ -1,6 +1,8 @@
 package be.panchito.pointRush.minigame.parkour;
 
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetEngine;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetInteract;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,6 +15,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -79,20 +82,18 @@ public final class ParkourListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
 
-        Action action = event.getAction();
-        boolean rightClick = action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
-        if (!rightClick) {
-            if (action == Action.PHYSICAL) return;
+        if (!MinigameGadgetInteract.isRightClick(event)) {
+            if (event.getAction() == Action.PHYSICAL) return;
             event.setCancelled(true);
             return;
         }
 
-        ItemStack item = event.getItem();
+        ItemStack item = MinigameGadgetInteract.itemInHand(event);
         if (item == null) {
             event.setCancelled(true);
             return;
@@ -100,6 +101,7 @@ public final class ParkourListener implements Listener {
         if (MinigameGadgetEngine.tryParkour(game.getPlugin(), game, player, item, event.getHand())
                 != MinigameGadgetEngine.Result.NOT_OURS) {
             event.setCancelled(true);
+            MinigameGadgetInteract.denyVanillaUse(event);
             return;
         }
         String tag = game.getItemTag(item);
@@ -108,6 +110,7 @@ public final class ParkourListener implements Listener {
             return;
         }
         event.setCancelled(true);
+        MinigameGadgetInteract.denyVanillaUse(event);
 
         if (game.getState() == ParkourGame.State.STARTING) {
             if (tag.equals(ParkourGame.ITEM_VISIBILITY)) {
@@ -121,6 +124,15 @@ public final class ParkourListener implements Listener {
             case ParkourGame.ITEM_CHECKPOINT -> game.teleportToCheckpoint(player);
             case ParkourGame.ITEM_VISIBILITY -> game.cycleVisibility(player);
             default -> { }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        if (MinigameGadgetItems.parse(game.getPlugin(), event.getItem()) != null) {
+            event.setCancelled(true);
         }
     }
 

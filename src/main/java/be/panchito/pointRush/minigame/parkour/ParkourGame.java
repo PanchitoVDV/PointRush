@@ -1,6 +1,7 @@
 package be.panchito.pointRush.minigame.parkour;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetMode;
 import be.panchito.pointRush.shop.MinigameShopHook;
@@ -9,7 +10,9 @@ import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.MinigameText;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
@@ -149,6 +152,9 @@ public final class ParkourGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan parkour (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -162,6 +168,7 @@ public final class ParkourGame {
         broadcastTitle("Parkour", "start in " + COUNTDOWN_SECONDS + " seconden");
         startCountdown();
         scoreboard.start();
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -247,22 +254,14 @@ public final class ParkourGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
-
         ParkourPlayerState ps = new ParkourPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
         MinigameShopHook.applyParkourJoin(plugin, player, ps);
 
-        player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -271,7 +270,7 @@ public final class ParkourGame {
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         giveItems(player);
         scoreboard.attach(player);
@@ -397,7 +396,7 @@ public final class ParkourGame {
 
         player.setGameMode(GameMode.SPECTATOR);
         if (config.getSpawn() != null) {
-            player.teleport(config.getSpawn());
+            plugin.getTeleporter().teleport(player, config.getSpawn());
         }
 
         boolean anyRunning = false;
@@ -495,10 +494,7 @@ public final class ParkourGame {
     }
 
     private void restorePlayer(Player player, ParkourPlayerState ps, boolean teleport) {
-        // Spectator camera kan een tp negeren als hij vastzit aan een ander entity.
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try { player.setSpectatorTarget(null); } catch (Throwable ignored) { }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
 
         for (Player other : Bukkit.getOnlinePlayers()) {
             player.showPlayer(plugin, other);
@@ -509,10 +505,6 @@ public final class ParkourGame {
             player.setGameMode(ps.getSavedGameMode());
         }
 
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
-        }
         player.setFireTicks(0);
         player.setFallDistance(0f);
         player.removePotionEffect(PotionEffectType.SPEED);

@@ -19,9 +19,10 @@ public enum MinigameGadgetType {
             "Plakbal",
             "Maakt iemand zwaar traag."),
 
-    SPARK_ROD(Material.COPPER_INGOT, false, 1,
-            "Donderstaaf",
-            "Zwakte en bliksem - geen echte schade."),
+    /** Lanceert de gebruiker zelf de lucht in. */
+    SPRING_STICK(Material.RABBIT_FOOT, true, 1,
+            "Springstok",
+            "Lanceert je ~5 blokken de lucht in - 1x."),
 
     /** Alleen parkour / TNT Run: eigen speed-boost. */
     TURBO_FUNGUS(Material.RED_MUSHROOM, true, 1,

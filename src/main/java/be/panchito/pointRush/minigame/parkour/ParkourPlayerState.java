@@ -2,13 +2,13 @@ package be.panchito.pointRush.minigame.parkour;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
 
 /**
  * Per-player state tracked while a parkour event is running.
  * Captures the pre-event snapshot we need to restore on stop/quit.
+ * Inventories are managed per world by Multiverse-Inventories.
  */
 public final class ParkourPlayerState {
 
@@ -21,7 +21,6 @@ public final class ParkourPlayerState {
     private final UUID uuid;
     private final Location savedLocation;
     private final GameMode savedGameMode;
-    private final ItemStack[] savedInventory;
 
     /** -1 = nog geen enkele checkpoint, anders index in {@code ParkourConfig#getCheckpoints()}. */
     private int checkpointIndex = -1;
@@ -35,11 +34,10 @@ public final class ParkourPlayerState {
     private boolean shopParkourJump;
     private boolean shopParkourCloud;
 
-    public ParkourPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode, ItemStack[] savedInventory) {
+    public ParkourPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode) {
         this.uuid = uuid;
         this.savedLocation = savedLocation;
         this.savedGameMode = savedGameMode;
-        this.savedInventory = savedInventory;
     }
 
     public UUID getUuid() {
@@ -52,10 +50,6 @@ public final class ParkourPlayerState {
 
     public GameMode getSavedGameMode() {
         return savedGameMode;
-    }
-
-    public ItemStack[] getSavedInventory() {
-        return savedInventory;
     }
 
     public int getCheckpointIndex() {

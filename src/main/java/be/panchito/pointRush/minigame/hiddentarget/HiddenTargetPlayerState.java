@@ -2,19 +2,18 @@ package be.panchito.pointRush.minigame.hiddentarget;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
 
 /**
  * Per-player runtime state for Hidden Target.
+ * Inventories are managed per world by Multiverse-Inventories.
  */
 public final class HiddenTargetPlayerState {
 
     private final UUID uuid;
     private final Location savedLocation;
     private final GameMode savedGameMode;
-    private final ItemStack[] savedInventory;
 
     private boolean alive = true;
     private UUID targetId;
@@ -25,12 +24,10 @@ public final class HiddenTargetPlayerState {
     private int pointsEarned = 0;
     private int pointsLost = 0;
 
-    public HiddenTargetPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode,
-                                   ItemStack[] savedInventory) {
+    public HiddenTargetPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode) {
         this.uuid = uuid;
         this.savedLocation = savedLocation;
         this.savedGameMode = savedGameMode;
-        this.savedInventory = savedInventory;
     }
 
     public UUID getUuid() {
@@ -43,10 +40,6 @@ public final class HiddenTargetPlayerState {
 
     public GameMode getSavedGameMode() {
         return savedGameMode;
-    }
-
-    public ItemStack[] getSavedInventory() {
-        return savedInventory;
     }
 
     public boolean isAlive() {

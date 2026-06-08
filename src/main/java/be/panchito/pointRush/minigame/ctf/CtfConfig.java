@@ -27,6 +27,7 @@ public final class CtfConfig {
     private final JavaPlugin plugin;
     private final UnifiedSettings unified;
 
+    private Location castleSpawn;
     private Location redSpawn;
     private Location blueSpawn;
     private int roundMinutes = DEFAULT_ROUND_MINUTES;
@@ -41,6 +42,7 @@ public final class CtfConfig {
     }
 
     public void load() {
+        castleSpawn = null;
         redSpawn = null;
         blueSpawn = null;
         roundMinutes = DEFAULT_ROUND_MINUTES;
@@ -53,6 +55,7 @@ public final class CtfConfig {
         if (cfg.getConfigurationSection(KEY) == null) {
             return;
         }
+        castleSpawn = loadLocation(cfg, KEY + ".castleSpawn");
         redSpawn = loadLocation(cfg, KEY + ".redSpawn");
         blueSpawn = loadLocation(cfg, KEY + ".blueSpawn");
         if (cfg.isSet(KEY + ".roundMinutes")) {
@@ -79,6 +82,7 @@ public final class CtfConfig {
         cfg.set(KEY + ".flagSpawn", null);
         cfg.set(KEY + ".redDelivery", null);
         cfg.set(KEY + ".blueDelivery", null);
+        if (castleSpawn != null) saveLocation(cfg, KEY + ".castleSpawn", castleSpawn);
         if (redSpawn != null) saveLocation(cfg, KEY + ".redSpawn", redSpawn);
         if (blueSpawn != null) saveLocation(cfg, KEY + ".blueSpawn", blueSpawn);
         cfg.set(KEY + ".roundMinutes", roundMinutes);
@@ -119,6 +123,78 @@ public final class CtfConfig {
         cfg.set(path + ".z", loc.getZ());
         cfg.set(path + ".yaw", loc.getYaw());
         cfg.set(path + ".pitch", loc.getPitch());
+    }
+
+    public Location getCastleSpawn() {
+        return castleSpawn;
+    }
+
+    public void setCastleSpawn(Location castleSpawn) {
+        this.castleSpawn = castleSpawn;
+        save();
+    }
+
+    /**
+     * Fysieke spawn voor een teamkleur deze ronde. Oneven rondes: rood→{@link #redSpawn},
+     * blauw→{@link #blueSpawn}. Even rondes: omgedraaid.
+     */
+    public Location getRoundTeamSpawn(CtfSide side, int roundNumber) {
+        if (redSpawn == null || blueSpawn == null) {
+            Location fallback = getSpawn(side);
+            return fallback != null ? fallback.clone() : null;
+        }
+        boolean swapSides = roundNumber % 2 == 0;
+        if (side == CtfSide.RED) {
+            return (swapSides ? blueSpawn : redSpawn).clone();
+        }
+        return (swapSides ? redSpawn : blueSpawn).clone();
+    }
+
+    /** Waar het verstop-team naartoe gaat (kasteel op oneven rondes, anders ronde-kamp). */
+    public Location resolveHideSpawn(CtfSide hidingSide, int roundNumber) {
+        if (castleSpawn != null && roundNumber % 2 == 1) {
+            return castleSpawn.clone();
+        }
+        return getRoundTeamSpawn(hidingSide, roundNumber);
+    }
+
+    /**
+     * Wachtplek voor het zoek-team. Staat op het kamp dat niet de verstop-locatie is.
+     */
+    public Location resolveWaitSpawn(CtfSide seekingSide, CtfSide hidingSide, int roundNumber) {
+        Location hideSite = resolveHideSpawn(hidingSide, roundNumber);
+        Location seekBase = getRoundTeamSpawn(seekingSide, roundNumber);
+        if (hideSite == null) {
+            return seekBase;
+        }
+        if (seekBase == null) {
+            return hideSite.clone();
+        }
+        if (isSameSite(seekBase, hideSite)) {
+            Location opposite = getRoundTeamSpawn(seekingSide.opposite(), roundNumber);
+            return opposite != null ? opposite.clone() : seekBase.clone();
+        }
+        return seekBase.clone();
+    }
+
+    private static boolean isSameSite(Location a, Location b) {
+        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null) {
+            return false;
+        }
+        if (!a.getWorld().equals(b.getWorld())) {
+            return false;
+        }
+        return a.distanceSquared(b) <= 16 || a.getY() >= b.getY() - 0.5;
+    }
+
+    /**
+     * Spawn voor een speler deze ronde: verstop-team → hide-kamp, zoek-team → wachtplek.
+     */
+    public Location getRoundSpawn(CtfSide side, boolean hidingThisRound, CtfSide hidingSide, int roundNumber) {
+        if (hidingThisRound) {
+            return resolveHideSpawn(hidingSide, roundNumber);
+        }
+        return resolveWaitSpawn(side, hidingSide, roundNumber);
     }
 
     public Location getRedSpawn() {
@@ -196,8 +272,8 @@ public final class CtfConfig {
         save();
     }
 
-    public boolean isNearSpawn(CtfSide side, Location playerLoc) {
-        Location spawn = getSpawn(side);
+    public boolean isNearSpawn(CtfSide side, Location playerLoc, int roundNumber) {
+        Location spawn = getRoundTeamSpawn(side, roundNumber);
         if (spawn == null || playerLoc.getWorld() == null) return false;
         if (spawn.getWorld() != playerLoc.getWorld()) return false;
         return spawn.distanceSquared(playerLoc) <= captureRadius * captureRadius;

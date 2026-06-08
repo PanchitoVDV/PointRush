@@ -1,13 +1,16 @@
 package be.panchito.pointRush.minigame.hiddentarget;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.MinigameText;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -140,6 +143,9 @@ public final class HiddenTargetGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan Hidden Target (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -164,6 +170,7 @@ public final class HiddenTargetGame {
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.2f);
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -210,20 +217,13 @@ public final class HiddenTargetGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
         HiddenTargetPlayerState ps = new HiddenTargetPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
 
-        player.getInventory().clear();
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setFireTicks(0);
@@ -375,12 +375,15 @@ public final class HiddenTargetGame {
             ps.setAlive(true);
             ps.setRespawnAtMs(0L);
 
+            PlayerRespawnUtil.forceRespawnIfDead(player);
+            PlayerRespawnUtil.clearSpectatorState(player);
+
             Location respawn = config.getSpawn();
             if (respawn == null) {
                 respawn = ps.getSavedLocation();
             }
             if (respawn != null && respawn.getWorld() != null) {
-                player.teleport(respawn);
+                plugin.getTeleporter().teleport(player, respawn);
             }
             giveKit(player);
             updateCompassFor(player, ps.getTargetId());
@@ -447,11 +450,7 @@ public final class HiddenTargetGame {
 
         reassignHuntersOfVictim(victimId, reassignedHunter);
 
-        victim.getInventory().clear();
-        victim.setHealth(20.0);
-        victim.setGameMode(GameMode.SPECTATOR);
-        victim.setFireTicks(0);
-        victim.setFallDistance(0f);
+        PlayerRespawnUtil.forceRespawnIfDead(victim);
 
         Location loc = victim.getLocation();
         loc.getWorld().spawnParticle(Particle.SMOKE, loc, 20, 0.4, 0.5, 0.4, 0.02);
@@ -814,28 +813,17 @@ public final class HiddenTargetGame {
     }
 
     private void restorePlayer(Player player, HiddenTargetPlayerState ps, boolean teleport) {
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try {
-                player.setSpectatorTarget(null);
-            } catch (Throwable ignored) {
-            }
-        }
-        player.getInventory().clear();
+        PlayerRespawnUtil.prepareForRestore(player);
         player.setGameMode(ps.getSavedGameMode());
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        ItemStack[] saved = ps.getSavedInventory();
-        if (saved != null) {
-            player.getInventory().setContents(saved);
-        }
-
         if (teleport) {
             Location loc = ps.getSavedLocation();
             if (loc != null && loc.getWorld() != null) {
-                player.teleport(loc);
+                plugin.getTeleporter().teleport(player, loc);
             }
         }
     }

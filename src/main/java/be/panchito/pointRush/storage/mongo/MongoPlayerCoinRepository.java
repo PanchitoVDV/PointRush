@@ -56,6 +56,24 @@ public final class MongoPlayerCoinRepository {
         return out;
     }
 
+    /**
+     * Som van alle verzamelde munten in één query, zonder tussenliggende Map-allocatie.
+     * Bedoeld voor de (async ververste) {@link be.panchito.pointRush.coins.CoinTotalCache}.
+     */
+    public int getTotalCoins(UUID player) {
+        Document doc = profiles.find(Filters.eq("_id", player.toString())).first();
+        if (doc == null || !(doc.get("coins") instanceof Document coins)) {
+            return 0;
+        }
+        int sum = 0;
+        for (String key : coins.keySet()) {
+            if (coins.get(key) instanceof Number n) {
+                sum += n.intValue();
+            }
+        }
+        return sum;
+    }
+
     public Map<String, Integer> getShopCharges(UUID player) {
         Document doc = profiles.find(Filters.eq("_id", player.toString())).first();
         return extractShopCharges(doc);

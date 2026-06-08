@@ -1,5 +1,7 @@
 package be.panchito.pointRush.commands;
 
+import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameRegistry;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
@@ -10,18 +12,24 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * /team command handler. Supports create / invite / accept / deny / leave / kick /
@@ -31,13 +39,23 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "create", "invite", "accept", "deny", "leave",
-            "kick", "info", "list", "disband", "color", "help"
+            "kick", "info", "list", "disband", "color", "sethome", "home", "help"
     );
 
+    /** Seconds the player must stand still before being teleported to the team home. */
+    private static final int HOME_WARMUP_SECONDS = 10;
+    /** Squared distance (blocks^2) the player may drift before the warmup is cancelled. */
+    private static final double HOME_MOVE_TOLERANCE_SQ = 0.04;
+
+    private final PointRush plugin;
     private final TeamManager teamManager;
     private final DataManager dataManager;
 
-    public TeamCommand(TeamManager teamManager, DataManager dataManager) {
+    /** Players currently in a /team home warmup, mapped to their running tick task. */
+    private final Map<UUID, BukkitTask> activeWarmups = new ConcurrentHashMap<>();
+
+    public TeamCommand(PointRush plugin, TeamManager teamManager, DataManager dataManager) {
+        this.plugin = plugin;
         this.teamManager = teamManager;
         this.dataManager = dataManager;
     }
@@ -66,6 +84,8 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
             case "list" -> handleList(player);
             case "disband" -> handleDisband(player);
             case "color" -> handleColor(player, args);
+            case "sethome" -> handleSetHome(player);
+            case "home" -> handleHome(player);
             default -> sendHelp(player);
         }
         return true;
@@ -84,6 +104,8 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(line("/team list", "Toon alle teams + punten"));
         player.sendMessage(line("/team disband", "Hef je team op (leader)"));
         player.sendMessage(line("/team color <kleur>", "Verander team kleur (leader)"));
+        player.sendMessage(line("/team sethome", "Zet de team home hier (leader)"));
+        player.sendMessage(line("/team home", "Teleport naar team home (10s stilstaan)"));
     }
 
     private Component line(String usage, String description) {
@@ -340,6 +362,123 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
         team.setColor(color);
         dataManager.save();
         broadcastToTeam(team, Messages.success("Team kleur is veranderd."));
+    }
+
+    private void handleSetHome(Player player) {
+        if (MinigameRegistry.anyActive(plugin)) {
+            player.sendMessage(Messages.error("Je kan /team sethome niet gebruiken tijdens een event."));
+            return;
+        }
+        Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
+        if (team == null) {
+            player.sendMessage(Messages.error("Je zit niet in een team."));
+            return;
+        }
+        if (!team.getLeader().equals(player.getUniqueId())) {
+            player.sendMessage(Messages.error("Alleen de leader kan de team home zetten."));
+            return;
+        }
+        team.setHome(player.getLocation());
+        dataManager.save();
+        broadcastToTeam(team, Messages.success("Team home is ingesteld door " + player.getName() + "."));
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.7f, 1.4f);
+    }
+
+    private void handleHome(Player player) {
+        if (MinigameRegistry.anyActive(plugin)) {
+            player.sendMessage(Messages.error("Je kan /team home niet gebruiken tijdens een event."));
+            return;
+        }
+        Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
+        if (team == null) {
+            player.sendMessage(Messages.error("Je zit niet in een team."));
+            return;
+        }
+        Location home = team.getHome();
+        if (home == null || home.getWorld() == null) {
+            player.sendMessage(Messages.error("Je team heeft nog geen home. Gebruik /team sethome."));
+            return;
+        }
+        if (activeWarmups.containsKey(player.getUniqueId())) {
+            player.sendMessage(Messages.error("Je bent al aan het teleporteren - blijf stilstaan."));
+            return;
+        }
+
+        Location start = player.getLocation().clone();
+        player.sendMessage(Messages.info("Teleport naar team home over " + HOME_WARMUP_SECONDS
+                + "s - blijf stilstaan."));
+        player.sendActionBar(Component.text(SmallText.of("teleport in " + HOME_WARMUP_SECONDS + "s"),
+                NamedTextColor.GOLD));
+        player.playSound(start, Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, 1.0f);
+
+        UUID id = player.getUniqueId();
+        BukkitTask task = new BukkitRunnable() {
+            int ticks = 0;
+
+            @Override
+            public void run() {
+                Player p = Bukkit.getPlayer(id);
+                if (p == null || !p.isOnline()) {
+                    cancelWarmup(id);
+                    return;
+                }
+                if (MinigameRegistry.anyActive(plugin)) {
+                    p.sendMessage(Messages.error("Teleport geannuleerd: er is een event gestart."));
+                    p.sendActionBar(Component.text(SmallText.of("teleport geannuleerd"), NamedTextColor.RED));
+                    cancelWarmup(id);
+                    return;
+                }
+                if (hasMoved(start, p.getLocation())) {
+                    p.sendMessage(Messages.error("Teleport geannuleerd: je bewoog."));
+                    p.sendActionBar(Component.text(SmallText.of("teleport geannuleerd"), NamedTextColor.RED));
+                    p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.6f, 0.7f);
+                    cancelWarmup(id);
+                    return;
+                }
+
+                ticks++;
+                if (ticks % 20 == 0) {
+                    int remaining = HOME_WARMUP_SECONDS - (ticks / 20);
+                    if (remaining > 0) {
+                        p.sendActionBar(Component.text(SmallText.of("teleport in " + remaining + "s"),
+                                NamedTextColor.GOLD));
+                        p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_HAT, 0.5f, 1.2f);
+                    }
+                }
+
+                if (ticks >= HOME_WARMUP_SECONDS * 20) {
+                    cancelWarmup(id);
+                    Team current = teamManager.getTeamOfPlayer(id);
+                    Location dest = current != null ? current.getHome() : null;
+                    if (dest == null || dest.getWorld() == null) {
+                        p.sendMessage(Messages.error("Team home is niet meer beschikbaar."));
+                        return;
+                    }
+                    p.teleport(dest);
+                    p.setFallDistance(0f);
+                    p.sendActionBar(Component.text(SmallText.of("welkom bij de team home"), NamedTextColor.GREEN));
+                    p.playSound(dest, Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.0f);
+                }
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+        activeWarmups.put(id, task);
+    }
+
+    private void cancelWarmup(UUID id) {
+        BukkitTask task = activeWarmups.remove(id);
+        if (task != null) {
+            try { task.cancel(); } catch (IllegalStateException ignored) { }
+        }
+    }
+
+    private static boolean hasMoved(Location start, Location now) {
+        if (start.getWorld() == null || now.getWorld() == null) {
+            return true;
+        }
+        if (!start.getWorld().equals(now.getWorld())) {
+            return true;
+        }
+        return start.distanceSquared(now) > HOME_MOVE_TOLERANCE_SQ;
     }
 
     private void broadcastToTeam(Team team, Component message) {

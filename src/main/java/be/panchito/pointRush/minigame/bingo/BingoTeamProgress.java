@@ -22,7 +22,9 @@ public final class BingoTeamProgress {
     public BingoTeamProgress(UUID bucketId, String label) {
         this.bucketId = bucketId;
         this.label = label;
-        checked[BingoGrid.FREE_INDEX] = true;
+        if (BingoGrid.FREE_INDEX >= 0) {
+            checked[BingoGrid.FREE_INDEX] = true;
+        }
     }
 
     public UUID getBucketId() {
@@ -52,7 +54,7 @@ public final class BingoTeamProgress {
     }
 
     public int countNeeded() {
-        return BingoGrid.RANDOM_SLOTS - (countFound() - 1);
+        return BingoGrid.TOTAL - countFound();
     }
 
     public boolean isComplete() {

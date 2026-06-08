@@ -2,28 +2,28 @@ package be.panchito.pointRush.minigame.tnttag;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
 
 /**
  * Per-player runtime state for an active TNT Tag event.
- * Holds the pre-event snapshot (location, inventory, gamemode) and the live status:
+ * Holds the pre-event snapshot (location, gamemode) and the live status:
  * whether the player is alive, currently tagged, and the cooldown that prevents
- * instant tag-backs after a pass.
+ * instant tag-backs after a pass. Inventories are managed per world by
+ * Multiverse-Inventories.
  */
 public final class TntTagPlayerState {
 
     private final UUID uuid;
     private final Location savedLocation;
     private final GameMode savedGameMode;
-    private final ItemStack[] savedInventory;
-    private final ItemStack savedHelmet;
 
     private boolean alive = true;
     private boolean tagged = false;
-    /** Wall-clock ms until tags to/from this player are ignored (anti-instant-back). */
-    private long tagCooldownExpiresMs = 0L;
+    /** Who handed this player the TNT (for the directional anti-ping-pong guard). */
+    private UUID lastTaggedBy = null;
+    /** Wall-clock ms until this player may pass the TNT straight back to {@link #lastTaggedBy}. */
+    private long passBackGuardUntilMs = 0L;
     /** Round number the player got eliminated in (0 = still alive or never died). */
     private int eliminatedInRound = 0;
     /** Cumulative number of rounds survived (a round counts when round ends without dying). */
@@ -37,13 +37,10 @@ public final class TntTagPlayerState {
     private boolean shopTagIronRush;
     private boolean shopTagSecondWind;
 
-    public TntTagPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode,
-                             ItemStack[] savedInventory, ItemStack savedHelmet) {
+    public TntTagPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode) {
         this.uuid = uuid;
         this.savedLocation = savedLocation;
         this.savedGameMode = savedGameMode;
-        this.savedInventory = savedInventory;
-        this.savedHelmet = savedHelmet;
     }
 
     public UUID getUuid() {
@@ -56,14 +53,6 @@ public final class TntTagPlayerState {
 
     public GameMode getSavedGameMode() {
         return savedGameMode;
-    }
-
-    public ItemStack[] getSavedInventory() {
-        return savedInventory;
-    }
-
-    public ItemStack getSavedHelmet() {
-        return savedHelmet;
     }
 
     public boolean isAlive() {
@@ -82,12 +71,20 @@ public final class TntTagPlayerState {
         this.tagged = tagged;
     }
 
-    public long getTagCooldownExpiresMs() {
-        return tagCooldownExpiresMs;
+    public UUID getLastTaggedBy() {
+        return lastTaggedBy;
     }
 
-    public void setTagCooldownExpiresMs(long tagCooldownExpiresMs) {
-        this.tagCooldownExpiresMs = tagCooldownExpiresMs;
+    public void setLastTaggedBy(UUID lastTaggedBy) {
+        this.lastTaggedBy = lastTaggedBy;
+    }
+
+    public long getPassBackGuardUntilMs() {
+        return passBackGuardUntilMs;
+    }
+
+    public void setPassBackGuardUntilMs(long passBackGuardUntilMs) {
+        this.passBackGuardUntilMs = passBackGuardUntilMs;
     }
 
     public int getEliminatedInRound() {

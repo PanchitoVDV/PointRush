@@ -1,11 +1,13 @@
 package be.panchito.pointRush.minigame.bingo;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
@@ -15,6 +17,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -40,7 +43,6 @@ public final class BingoGame {
 
     public enum State { IDLE, RUNNING }
 
-    public static final int FIRST_COMPLETE_BONUS = 150;
     public static final int[] TOP_TEAM_POINTS = { 100, 80, 60, 40, 25 };
 
     private final PointRush plugin;
@@ -58,8 +60,12 @@ public final class BingoGame {
 
     private long eventStartedAtMs = 0L;
     private long runEndsAtMs = 0L;
-    private UUID firstCompleteBucket = null;
     private boolean historyRecorded = false;
+
+    /** Buckets in volgorde waarin ze hun kaart compleet maakten. */
+    private final List<UUID> finishedBuckets = new ArrayList<>();
+    /** Werkelijk toegekende punten per bucket (voor history). */
+    private final Map<UUID, Integer> awardedPoints = new HashMap<>();
 
     private BukkitTask tickTask;
 
@@ -136,11 +142,15 @@ public final class BingoGame {
         teamProgress.clear();
         participants.clear();
         openGuis.clear();
-        firstCompleteBucket = null;
+        finishedBuckets.clear();
+        awardedPoints.clear();
         historyRecorded = false;
 
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.getGameMode() == GameMode.CREATIVE || online.getGameMode() == GameMode.SPECTATOR) {
+                continue;
+            }
+            if (!LobbyWorld.contains(plugin, online)) {
                 continue;
             }
             joinPlayer(online);
@@ -161,6 +171,7 @@ public final class BingoGame {
         syncAllTeams();
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -287,21 +298,28 @@ public final class BingoGame {
         progress.setCompletionAnnounced(true);
 
         Team team = teamManager.getTeam(bucketId);
-        if (firstCompleteBucket == null) {
-            firstCompleteBucket = bucketId;
-            if (team != null) {
-                team.addPoints(FIRST_COMPLETE_BONUS);
+        int placementIndex = finishedBuckets.size();
+        finishedBuckets.add(bucketId);
+
+        int pts = 0;
+        if (team != null) {
+            if (placementIndex < TOP_TEAM_POINTS.length) {
+                pts += TOP_TEAM_POINTS[placementIndex];
+            }
+            if (pts > 0) {
+                team.addPoints(pts);
                 dataManager.save();
             }
         }
+        awardedPoints.put(bucketId, pts);
 
         var builder = Component.text()
                 .append(Component.text(SmallText.of("BINGO! "), NamedTextColor.GREEN, TextDecoration.BOLD))
                 .append(Component.text(bucketLabel(bucketId),
                         team != null ? team.getColor() : NamedTextColor.GOLD, TextDecoration.BOLD));
-        if (firstCompleteBucket.equals(bucketId) && team != null) {
-            builder.append(Component.text(SmallText.of(" · eerste compleet · +"
-                    + FIRST_COMPLETE_BONUS + " bonus"), NamedTextColor.GRAY));
+        if (team != null && pts > 0) {
+            builder.append(Component.text(SmallText.of(" · plek " + (placementIndex + 1) + " · +"
+                    + pts + " pts"), NamedTextColor.GRAY));
         } else {
             builder.append(Component.text(SmallText.of(" · kaart compleet!"), NamedTextColor.GRAY));
         }
@@ -315,19 +333,41 @@ public final class BingoGame {
             member.playSound(member.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
         }
         refreshTeamGuis(bucketId, progress);
+
+        finishAndTeleportTeam(bucketId);
+    }
+
+    /**
+     * Teleporteert de teamleden naar de bingo-spawn (andere wereld → nieuwe Multiverse inventory)
+     * en haalt ze uit het lopende event. De voortgang blijft bewaard voor de eindstand/history.
+     */
+    private void finishAndTeleportTeam(UUID bucketId) {
+        Location spawn = config.getSpawn();
+        if (spawn == null || spawn.getWorld() == null) {
+            plugin.getLogger().warning("Bingo: geen (geldige) spawn ingesteld; team "
+                    + bucketLabel(bucketId) + " wordt niet geteleporteerd. Gebruik /bingo setspawn.");
+        }
+        for (Player member : onlineMembers(bucketId)) {
+            Inventory open = openGuis.get(member.getUniqueId());
+            if (open != null && member.getOpenInventory().getTopInventory().equals(open)) {
+                member.closeInventory();
+            }
+            if (spawn != null && spawn.getWorld() != null) {
+                try {
+                    plugin.getTeleporter().teleport(member, spawn);
+                } catch (Exception ignored) {
+                }
+            }
+            removeParticipant(member);
+        }
     }
 
     private void endEvent(boolean forced) {
         syncAllTeams();
 
-        List<Map.Entry<UUID, BingoTeamProgress>> ranking = new ArrayList<>(teamProgress.entrySet());
-        ranking.sort(Comparator.<Map.Entry<UUID, BingoTeamProgress>>comparingInt(
-                e -> e.getValue().countFound()).reversed()
-                .thenComparingLong(e -> e.getValue().getCompletedAtMs() > 0
-                        ? e.getValue().getCompletedAtMs() : Long.MAX_VALUE));
-
-        awardTopTeams(ranking);
-        recordHistory(ranking);
+        List<Map.Entry<UUID, BingoTeamProgress>> remaining = remainingRanked();
+        awardRemaining(remaining);
+        recordHistory(remaining);
 
         Bukkit.broadcast(Messages.PREFIX.append(Component.text()
                 .append(Component.text(SmallText.of(forced ? "Bingo gestopt." : "Bingo afgelopen! "),
@@ -338,46 +378,60 @@ public final class BingoGame {
         cleanup();
     }
 
-    private void awardTopTeams(List<Map.Entry<UUID, BingoTeamProgress>> ranking) {
-        int placed = 0;
-        for (Map.Entry<UUID, BingoTeamProgress> entry : ranking) {
+    /** Teams die NIET compleet maakten, gesorteerd op gevonden vakken. */
+    private List<Map.Entry<UUID, BingoTeamProgress>> remainingRanked() {
+        List<Map.Entry<UUID, BingoTeamProgress>> remaining = new ArrayList<>();
+        for (Map.Entry<UUID, BingoTeamProgress> e : teamProgress.entrySet()) {
+            if (!finishedBuckets.contains(e.getKey())) {
+                remaining.add(e);
+            }
+        }
+        remaining.sort(Comparator.<Map.Entry<UUID, BingoTeamProgress>>comparingInt(
+                e -> e.getValue().countFound()).reversed());
+        return remaining;
+    }
+
+    private void awardRemaining(List<Map.Entry<UUID, BingoTeamProgress>> remaining) {
+        int placed = finishedBuckets.size();
+        boolean changed = false;
+        for (Map.Entry<UUID, BingoTeamProgress> entry : remaining) {
             if (placed >= TOP_TEAM_POINTS.length) break;
-            if (entry.getValue().countFound() <= 1) break;
+            if (entry.getValue().countFound() <= 0) break;
 
             Team team = teamManager.getTeam(entry.getKey());
             if (team == null) continue;
 
             int pts = TOP_TEAM_POINTS[placed];
             team.addPoints(pts);
+            awardedPoints.put(entry.getKey(), pts);
             placed++;
+            changed = true;
 
             Bukkit.broadcast(Messages.info("Top " + placed + ": team "
                     + team.getName() + " · " + entry.getValue().countFound()
                     + " vakken · +" + pts + " pts"));
         }
-        if (placed > 0) {
+        if (changed) {
             dataManager.save();
         }
     }
 
-    private void recordHistory(List<Map.Entry<UUID, BingoTeamProgress>> ranking) {
+    private void recordHistory(List<Map.Entry<UUID, BingoTeamProgress>> remaining) {
         if (historyManager == null || historyRecorded) return;
         historyRecorded = true;
 
+        List<UUID> order = new ArrayList<>(finishedBuckets);
+        for (Map.Entry<UUID, BingoTeamProgress> entry : remaining) {
+            order.add(entry.getKey());
+        }
+
         List<EventHistoryEntry.Placement> placements = new ArrayList<>();
         int rank = 1;
-        for (Map.Entry<UUID, BingoTeamProgress> entry : ranking) {
-            UUID bucketId = entry.getKey();
-            BingoTeamProgress prog = entry.getValue();
+        for (UUID bucketId : order) {
+            BingoTeamProgress prog = teamProgress.get(bucketId);
+            if (prog == null) continue;
             Team team = teamManager.getTeam(bucketId);
-
-            int pts = 0;
-            if (rank <= TOP_TEAM_POINTS.length && team != null && prog.countFound() > 1) {
-                pts = TOP_TEAM_POINTS[rank - 1];
-            }
-            if (firstCompleteBucket != null && firstCompleteBucket.equals(bucketId) && team != null) {
-                pts += FIRST_COMPLETE_BONUS;
-            }
+            int pts = awardedPoints.getOrDefault(bucketId, 0);
 
             placements.add(new EventHistoryEntry.Placement(
                     rank++,
@@ -452,6 +506,9 @@ public final class BingoGame {
         }
         if (participants.contains(player.getUniqueId())) {
             giveMap(player);
+            return;
+        }
+        if (finishedBuckets.contains(bucketFor(player.getUniqueId()))) {
             return;
         }
         joinPlayer(player);

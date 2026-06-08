@@ -1,6 +1,10 @@
 package be.panchito.pointRush;
 
+import be.panchito.pointRush.commands.DimensionCommand;
+import be.panchito.pointRush.commands.ProfileWebsiteCommand;
 import be.panchito.pointRush.commands.EventCommand;
+import be.panchito.pointRush.placeholder.PointRushExpansion;
+import be.panchito.pointRush.profile.PlayerProfileService;
 import be.panchito.pointRush.commands.LiveCommand;
 import be.panchito.pointRush.commands.RandomEventCommand;
 import be.panchito.pointRush.commands.PointRushCommand;
@@ -9,9 +13,11 @@ import be.panchito.pointRush.commands.CoinCommand;
 import be.panchito.pointRush.commands.ShopCommand;
 import be.panchito.pointRush.commands.TeamCommand;
 import be.panchito.pointRush.config.UnifiedSettings;
+import be.panchito.pointRush.cosmetic.JoinLeaveListener;
 import be.panchito.pointRush.coins.CoinCollectionMenu;
 import be.panchito.pointRush.coins.CoinPickupListener;
 import be.panchito.pointRush.coins.CoinSpawnConfig;
+import be.panchito.pointRush.coins.CoinTotalCache;
 import be.panchito.pointRush.coins.NexoCoinSpawner;
 import be.panchito.pointRush.shop.CoinCreditRegistry;
 import be.panchito.pointRush.shop.CoinShopService;
@@ -62,17 +68,31 @@ import be.panchito.pointRush.minigame.ctf.CtfCommand;
 import be.panchito.pointRush.minigame.ctf.CtfConfig;
 import be.panchito.pointRush.minigame.ctf.CtfGame;
 import be.panchito.pointRush.minigame.ctf.CtfListener;
+import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownCommand;
+import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownConfig;
+import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownGame;
+import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownListener;
 import be.panchito.pointRush.minigame.tnttag.TntTagCommand;
 import be.panchito.pointRush.minigame.tnttag.TntTagConfig;
 import be.panchito.pointRush.minigame.tnttag.TntTagGame;
 import be.panchito.pointRush.minigame.tnttag.TntTagListener;
+import be.panchito.pointRush.minigame.boss.BossEventCommand;
+import be.panchito.pointRush.minigame.boss.BossEventConfig;
+import be.panchito.pointRush.minigame.boss.BossEventGame;
+import be.panchito.pointRush.minigame.boss.BossEventListener;
+import be.panchito.pointRush.minigame.boss.MythicMobsBridge;
 import be.panchito.pointRush.minigame.MinigameRegistry;
+import be.panchito.pointRush.player.RespawnSafetyListener;
 import be.panchito.pointRush.random.RandomEventService;
+import be.panchito.pointRush.ui.MinigameHudService;
+import be.panchito.pointRush.ui.MinigameTransitionService;
 import be.panchito.pointRush.scoreboard.LobbyScoreboard;
 import be.panchito.pointRush.scoreboard.LobbyScoreboardListener;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.LeaderboardCache;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.world.DimensionPortalListener;
+import be.panchito.pointRush.world.WorldAccessSettings;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -88,6 +108,7 @@ public final class PointRush extends JavaPlugin {
     private static PointRush instance;
 
     private UnifiedSettings unifiedSettings;
+    private WorldAccessSettings worldAccessSettings;
     private LeaderboardCache leaderboardCache;
     private TeamManager teamManager;
     private DataManager dataManager;
@@ -129,14 +150,30 @@ public final class PointRush extends JavaPlugin {
     private CtfConfig ctfConfig;
     private CtfGame ctfGame;
 
+    private HoldTheCrownConfig holdTheCrownConfig;
+    private HoldTheCrownGame holdTheCrownGame;
+
+    private MythicMobsBridge mythicMobsBridge;
+    private BossEventConfig bossEventConfig;
+    private BossEventGame bossEventGame;
+
     private CoinSpawnConfig coinSpawnConfig;
     private NexoCoinSpawner nexoCoinSpawner;
+    private CoinTotalCache coinTotalCache;
+
+    /** Gedeelde virtuele-thread pool voor blokkerende I/O (MongoDB) buiten de hoofd-thread. */
+    private java.util.concurrent.ExecutorService dbExecutor;
 
     private CoinCreditRegistry coinCreditRegistry;
     private CoinShopService coinShopService;
 
     private LobbyScoreboard lobbyScoreboard;
     private RandomEventService randomEventService;
+
+    private PlayerProfileService playerProfileService;
+    private MinigameTransitionService minigameTransitionService;
+    private MinigameHudService minigameHudService;
+    private be.panchito.pointRush.util.MinigameTeleporter teleporter;
 
     @Override
     public void onEnable() {
@@ -150,6 +187,9 @@ public final class PointRush extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+
+        this.worldAccessSettings = new WorldAccessSettings(unifiedSettings, getLogger());
+        worldAccessSettings.load();
 
         this.leaderboardCache = new LeaderboardCache();
         this.teamManager = new TeamManager();
@@ -167,9 +207,32 @@ public final class PointRush extends JavaPlugin {
         eventHistoryManager.setOnRecord(dataManager::syncEventHistoryEntry);
         dataManager.syncAllEventHistory(eventHistoryManager.all());
 
-        registerCommand("team", new TeamCommand(teamManager, dataManager));
+        this.dbExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        this.teleporter = new be.panchito.pointRush.util.MinigameTeleporter(this);
+
+        this.playerProfileService = new PlayerProfileService(this);
+        this.minigameTransitionService = new MinigameTransitionService(this);
+        minigameTransitionService.init();
+        this.minigameHudService = new MinigameHudService(this, minigameTransitionService.getBridge());
+        minigameHudService.init();
+
+        registerCommand("team", new TeamCommand(this, teamManager, dataManager));
         registerCommand("points", new PointsCommand(teamManager, dataManager));
         registerCommand("pointrush", new PointRushCommand(eventHistoryManager, teamManager, dataManager));
+        registerCommand("prwebsite", new ProfileWebsiteCommand(playerProfileService));
+
+        registerCommand("dimension", new DimensionCommand(worldAccessSettings));
+        getServer().getPluginManager().registerEvents(
+                new DimensionPortalListener(worldAccessSettings), this);
+        getServer().getPluginManager().registerEvents(new JoinLeaveListener(), this);
+        getServer().getPluginManager().registerEvents(new RespawnSafetyListener(this), this);
+
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            new PointRushExpansion(this, playerProfileService).register();
+            getLogger().info("PlaceholderAPI: pointrush-placeholders geregistreerd.");
+        } else {
+            getLogger().warning("PlaceholderAPI niet gevonden — Ultimate UI profiel-placeholders werken niet.");
+        }
 
         LiveCommand liveCommand = new LiveCommand(this, dataManager.getLiveStreamRepository());
         registerCommand("live", liveCommand);
@@ -252,6 +315,19 @@ public final class PointRush extends JavaPlugin {
         registerCommand("ctf", new CtfCommand(ctfGame, ctfConfig));
         getServer().getPluginManager().registerEvents(new CtfListener(ctfGame), this);
 
+        this.holdTheCrownConfig = new HoldTheCrownConfig(this, unifiedSettings);
+        holdTheCrownConfig.load();
+        this.holdTheCrownGame = new HoldTheCrownGame(this, holdTheCrownConfig);
+        registerCommand("holdthecrown", new HoldTheCrownCommand(holdTheCrownGame, holdTheCrownConfig));
+        getServer().getPluginManager().registerEvents(new HoldTheCrownListener(holdTheCrownGame), this);
+
+        this.mythicMobsBridge = new MythicMobsBridge(this);
+        this.bossEventConfig = new BossEventConfig(this, unifiedSettings, mythicMobsBridge);
+        bossEventConfig.load();
+        this.bossEventGame = new BossEventGame(this, bossEventConfig);
+        registerCommand("bossevent", new BossEventCommand(bossEventGame, bossEventConfig));
+        getServer().getPluginManager().registerEvents(new BossEventListener(bossEventGame), this);
+
         this.coinSpawnConfig = new CoinSpawnConfig(this, unifiedSettings);
         coinSpawnConfig.load();
         this.coinCreditRegistry = CoinCreditRegistry.load(unifiedSettings);
@@ -259,10 +335,12 @@ public final class PointRush extends JavaPlugin {
                 dataManager.getPlayerCoinRepository(),
                 coinCreditRegistry,
                 coinSpawnConfig.getResolvedPoolIds());
+        this.coinTotalCache = new CoinTotalCache(this, dbExecutor);
+        this.coinTotalCache.start();
         this.nexoCoinSpawner = new NexoCoinSpawner(this, coinSpawnConfig, () -> MinigameRegistry.anyActive(this));
         getServer().getPluginManager().registerEvents(nexoCoinSpawner, this);
         getServer().getPluginManager().registerEvents(
-                new CoinPickupListener(this, coinSpawnConfig, dataManager, nexoCoinSpawner), this);
+                new CoinPickupListener(this, coinSpawnConfig, coinTotalCache, nexoCoinSpawner), this);
         getServer().getPluginManager().registerEvents(
                 new CoinCollectionMenu.CoinCollectionMenuListener(), this);
         getServer().getPluginManager().registerEvents(
@@ -291,12 +369,17 @@ public final class PointRush extends JavaPlugin {
                 + ", goldrush klaar: " + goldRushConfig.isReady()
                 + ", hiddentarget klaar: " + hiddenTargetConfig.isReady()
                 + ", ctf klaar: " + ctfConfig.isReady()
+                + ", holdthecrown klaar: " + holdTheCrownConfig.isReady()
+                + ", bossevent klaar: " + bossEventConfig.isReady()
                 + ", coins spawner klaar: " + coinSpawnConfig.isRunnable()
                 + " (nexo-async event volgt mogelijk nog).");
     }
 
     @Override
     public void onDisable() {
+        if (minigameHudService != null) {
+            minigameHudService.shutdown();
+        }
         if (lobbyScoreboard != null) {
             lobbyScoreboard.stop();
         }
@@ -339,11 +422,24 @@ public final class PointRush extends JavaPlugin {
         if (ctfGame != null && ctfGame.getState() != CtfGame.State.IDLE) {
             ctfGame.stop();
         }
+        if (holdTheCrownGame != null && holdTheCrownGame.getState() != HoldTheCrownGame.State.IDLE) {
+            holdTheCrownGame.stop();
+        }
+        if (bossEventGame != null && bossEventGame.getState() != BossEventGame.State.IDLE) {
+            bossEventGame.stop();
+        }
+        if (coinTotalCache != null) {
+            coinTotalCache.stop();
+        }
         if (nexoCoinSpawner != null) {
             nexoCoinSpawner.shutdown();
         }
         if (dataManager != null) {
             dataManager.shutdown();
+        }
+        if (dbExecutor != null) {
+            dbExecutor.shutdown();
+            dbExecutor = null;
         }
         if (eventHistoryManager != null) {
             eventHistoryManager.save();
@@ -369,6 +465,10 @@ public final class PointRush extends JavaPlugin {
 
     public UnifiedSettings getUnifiedSettings() {
         return unifiedSettings;
+    }
+
+    public WorldAccessSettings getWorldAccessSettings() {
+        return worldAccessSettings;
     }
 
     public LeaderboardCache getLeaderboardCache() {
@@ -487,7 +587,53 @@ public final class PointRush extends JavaPlugin {
         return ctfConfig;
     }
 
+    public HoldTheCrownGame getHoldTheCrownGame() {
+        return holdTheCrownGame;
+    }
+
+    public HoldTheCrownConfig getHoldTheCrownConfig() {
+        return holdTheCrownConfig;
+    }
+
+    public BossEventGame getBossEventGame() {
+        return bossEventGame;
+    }
+
+    public BossEventConfig getBossEventConfig() {
+        return bossEventConfig;
+    }
+
     public RandomEventService getRandomEventService() {
         return randomEventService;
+    }
+
+    public CoinSpawnConfig getCoinSpawnConfig() {
+        return coinSpawnConfig;
+    }
+
+    public CoinTotalCache getCoinTotalCache() {
+        return coinTotalCache;
+    }
+
+    /** Gedeelde virtuele-thread pool voor blokkerende I/O; {@code null} vóór enable / na disable. */
+    public java.util.concurrent.ExecutorService getDbExecutor() {
+        return dbExecutor;
+    }
+
+    public PlayerProfileService getPlayerProfileService() {
+        return playerProfileService;
+    }
+
+    public MinigameHudService getMinigameHudService() {
+        return minigameHudService;
+    }
+
+    /** Veilige cross-world teleport voor minigames (Multiverse-aware, met Bukkit-fallback). */
+    public be.panchito.pointRush.util.MinigameTeleporter getTeleporter() {
+        return teleporter;
+    }
+
+    public MinigameTransitionService getMinigameTransitionService() {
+        return minigameTransitionService;
     }
 }

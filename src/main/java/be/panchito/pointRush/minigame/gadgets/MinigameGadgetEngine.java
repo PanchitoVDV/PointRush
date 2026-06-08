@@ -12,6 +12,7 @@ import be.panchito.pointRush.minigame.tnttag.TntTagPlayerState;
 import be.panchito.pointRush.util.Messages;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -168,10 +169,15 @@ public final class MinigameGadgetEngine {
         }
 
         if (type.isSelfOnly()) {
-            applyTurbo(plugin, user);
+            switch (type) {
+                case SPRING_STICK -> applySpring(user);
+                default -> applyTurbo(plugin, user);
+            }
             consumeOne(plugin, user, slot, type);
             cooldownMap.put(user.getUniqueId(), now + GADGET_COOLDOWN_MS);
-            user.playSound(user.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.9f, 1.2f);
+            if (type != MinigameGadgetType.SPRING_STICK) {
+                user.playSound(user.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.9f, 1.2f);
+            }
             return Result.HANDLED;
         }
 
@@ -186,7 +192,6 @@ public final class MinigameGadgetEngine {
             case TWIST_ROD -> applyTwist(plugin, victim);
             case INK_BLOB -> victim.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 20 * 7, 0, false, true, true));
             case GOO_BALL -> victim.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 20 * 4, 3, false, true, true));
-            case SPARK_ROD -> applySpark(plugin, victim);
             case CHAOS_FRUIT -> applyChaos(plugin, victim);
             default -> {
                 return Result.HANDLED;
@@ -221,10 +226,15 @@ public final class MinigameGadgetEngine {
         victim.addPotionEffect(new PotionEffect(PotionEffectType.NAUSEA, 20 * 6, 0, false, true, true));
     }
 
-    private static void applySpark(PointRush plugin, Player victim) {
-        Location strike = victim.getLocation().clone().add(0, 0.05, 0);
-        victim.getWorld().strikeLightningEffect(strike);
-        victim.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, 20 * 5, 1, false, true, true));
+    /** Launches the user roughly 5 blocks straight up (one-shot pogo / spring stick). */
+    private static void applySpring(Player user) {
+        // ~0.92 blocks/tick upward velocity peaks at about 5 blocks given vanilla gravity/drag
+        user.setVelocity(user.getVelocity().setY(0.92));
+        user.setFallDistance(0f);
+        Location l = user.getLocation();
+        l.getWorld().spawnParticle(Particle.CLOUD, l, 18, 0.3, 0.1, 0.3, 0.02);
+        user.playSound(l, Sound.ENTITY_SLIME_SQUISH, 1.0f, 1.4f);
+        user.playSound(l, Sound.BLOCK_HONEY_BLOCK_SLIDE, 0.8f, 1.6f);
     }
 
     private static void spinPlayer(PointRush plugin, Player victim, int ticks, float yawStep) {
@@ -253,7 +263,9 @@ public final class MinigameGadgetEngine {
         if (amt <= 1) {
             player.getInventory().setItem(slot, null);
         } else {
-            current.setAmount(amt - 1);
+            ItemStack next = current.clone();
+            next.setAmount(amt - 1);
+            player.getInventory().setItem(slot, next);
         }
     }
 }

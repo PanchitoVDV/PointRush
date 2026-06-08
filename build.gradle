@@ -10,6 +10,10 @@ version = '1.0-SNAPSHOT'
 repositories {
     mavenCentral()
     maven {
+        name = "placeholderapi"
+        url = "https://repo.extendedclip.com/content/repositories/placeholderapi/"
+    }
+    maven {
         name = "papermc-repo"
         url = "https://repo.papermc.io/repository/maven-public/"
     }
@@ -21,12 +25,23 @@ repositories {
         name = "nexo"
         url = "https://repo.nexomc.com/releases"
     }
+    maven {
+        name = "lumine"
+        url = "https://mvn.lumine.io/repository/maven-public/"
+    }
+    maven {
+        name = "onarandombox"
+        url = "https://repo.onarandombox.com/content/groups/public/"
+    }
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("me.clip:placeholderapi:2.11.6")
     compileOnly("com.github.MTVehicles:MinetopiaVehicles:master-SNAPSHOT")
     compileOnly("com.nexomc:nexo:1.23")
+    compileOnly("io.lumine:Mythic-Dist:5.6.1")
+    compileOnly("org.mvplugins.multiverse.core:multiverse-core:5.7.0")
     implementation("org.mongodb:mongodb-driver-sync:5.3.1")
 }
 

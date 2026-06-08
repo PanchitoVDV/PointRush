@@ -2,7 +2,6 @@ package be.panchito.pointRush.minigame.race;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
 
@@ -20,13 +19,14 @@ import java.util.UUID;
  *     <li>{@code placement} — 0 while still racing, otherwise final placement (1 = winner).</li>
  *     <li>{@code licensePlate} — the MTVehicles license plate assigned to this driver.</li>
  * </ul>
+ *
+ * <p>Inventories are managed per world by Multiverse-Inventories.
  */
 public final class RacePlayerState {
 
     private final UUID uuid;
     private final Location savedLocation;
     private final GameMode savedGameMode;
-    private final ItemStack[] savedInventory;
     private final int gridSlot;
     private final String licensePlate;
 
@@ -41,11 +41,10 @@ public final class RacePlayerState {
     private boolean shopRacePit;
 
     public RacePlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode,
-                           ItemStack[] savedInventory, int gridSlot, String licensePlate) {
+                           int gridSlot, String licensePlate) {
         this.uuid = uuid;
         this.savedLocation = savedLocation;
         this.savedGameMode = savedGameMode;
-        this.savedInventory = savedInventory;
         this.gridSlot = gridSlot;
         this.licensePlate = licensePlate;
     }
@@ -60,10 +59,6 @@ public final class RacePlayerState {
 
     public GameMode getSavedGameMode() {
         return savedGameMode;
-    }
-
-    public ItemStack[] getSavedInventory() {
-        return savedInventory;
     }
 
     public int getGridSlot() {

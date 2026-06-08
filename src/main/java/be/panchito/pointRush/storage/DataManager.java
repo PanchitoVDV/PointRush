@@ -2,6 +2,7 @@ package be.panchito.pointRush.storage;
 
 import be.panchito.pointRush.config.UnifiedSettings;
 import be.panchito.pointRush.history.EventHistoryEntry;
+import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.mongo.MongoEventRepository;
 import be.panchito.pointRush.storage.mongo.MongoLiveStreamRepository;
 import be.panchito.pointRush.storage.mongo.MongoPlayerCoinRepository;
@@ -283,10 +284,11 @@ public final class DataManager {
     }
 
     /**
-     * Wist alle spelerdata: teams (in-memory + MongoDB) en rush-muntprofielen.
+     * Wist alle spelerdata: teams (in-memory + MongoDB), rush-muntprofielen en eventgeschiedenis
+     * (events.yml + MongoDB, voor de stats website).
      * Hoofd-thread aanbevolen; Mongo-writes zijn synchroon.
      */
-    public WipeResult wipeAllPlayerData() {
+    public WipeResult wipeAllPlayerData(EventHistoryManager historyManager) {
         cancelPendingFlush();
         leaderboardCache.invalidate();
 
@@ -307,8 +309,28 @@ public final class DataManager {
             }
         }
 
-        return new WipeResult(teamsRemoved, coinProfilesRemoved);
+        int eventsRemoved = 0;
+        if (historyManager != null) {
+            eventsRemoved = historyManager.clearAll();
+        }
+
+        long mongoEventsRemoved = 0L;
+        MongoEventRepository events = eventRepo;
+        if (events != null) {
+            try {
+                mongoEventsRemoved = events.deleteAll();
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.SEVERE, "Kon eventgeschiedenis niet wissen in MongoDB.", ex);
+                throw new IllegalStateException("Kon eventgeschiedenis niet wissen", ex);
+            }
+        }
+
+        if (mongoEventsRemoved > 0 && eventsRemoved == 0) {
+            eventsRemoved = (int) Math.min(mongoEventsRemoved, Integer.MAX_VALUE);
+        }
+
+        return new WipeResult(teamsRemoved, coinProfilesRemoved, eventsRemoved);
     }
 
-    public record WipeResult(int teamsRemoved, long coinProfilesRemoved) {}
+    public record WipeResult(int teamsRemoved, long coinProfilesRemoved, int eventsRemoved) {}
 }

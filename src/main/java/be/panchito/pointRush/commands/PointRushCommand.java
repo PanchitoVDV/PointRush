@@ -206,6 +206,9 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
                 NamedTextColor.GRAY));
         sender.sendMessage(Component.text(SmallText.of("  · alle rush-munten en shop-voorraad"),
                 NamedTextColor.GRAY));
+        int events = historyManager.all().size();
+        sender.sendMessage(Component.text(SmallText.of("  · alle eventgeschiedenis (" + events + " event(s), website stats)"),
+                NamedTextColor.GRAY));
         sender.sendMessage(Component.empty());
         sender.sendMessage(Component.text(SmallText.of("dit kan niet ongedaan worden gemaakt."),
                 NamedTextColor.RED));
@@ -224,10 +227,11 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
 
     private void executeWipe(CommandSender sender) {
         try {
-            DataManager.WipeResult result = dataManager.wipeAllPlayerData();
+            DataManager.WipeResult result = dataManager.wipeAllPlayerData(historyManager);
             sender.sendMessage(Messages.success(
                     "Alle spelerdata is gewist (" + result.teamsRemoved() + " team(s) opgeheven, "
-                            + result.coinProfilesRemoved() + " muntprofiel(en) verwijderd)."));
+                            + result.coinProfilesRemoved() + " muntprofiel(en) verwijderd, "
+                            + result.eventsRemoved() + " event(s) uit geschiedenis)."));
         } catch (IllegalStateException ex) {
             sender.sendMessage(Messages.error("Wipe mislukt: " + ex.getMessage()));
         }

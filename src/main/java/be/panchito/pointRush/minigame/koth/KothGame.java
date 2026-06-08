@@ -1,13 +1,16 @@
 package be.panchito.pointRush.minigame.koth;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
 import be.panchito.pointRush.util.MinigameText;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -78,6 +81,7 @@ public final class KothGame {
     private long eventStartedAtMs = 0L;
     private long runEndsAtMs = 0L;
     private long lastTickMs = 0L;
+    private long lastSpotParticleMs = 0L;
     private boolean historyRecorded = false;
 
     private BukkitTask tickTask;
@@ -177,6 +181,9 @@ public final class KothGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan KOTH (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -195,6 +202,7 @@ public final class KothGame {
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.4f);
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -246,20 +254,13 @@ public final class KothGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
         KothPlayerState ps = new KothPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
 
-        player.getInventory().clear();
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setFireTicks(0);
@@ -267,7 +268,7 @@ public final class KothGame {
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         giveKit(player);
         scoreboard.attach(player);
@@ -464,6 +465,12 @@ public final class KothGame {
     }
 
     private void tickPowerSpots(long now) {
+        // Particles zijn puur cosmetisch: throttle naar ~elke 400ms i.p.v. elke tick (20x/s) om
+        // packet-/CPU-druk te beperken. Marker-spawn en pickup-detectie blijven elke tick.
+        boolean showParticles = now - lastSpotParticleMs >= 400L;
+        if (showParticles) {
+            lastSpotParticleMs = now;
+        }
         for (KothPowerSpot spot : config.getPowerSpots()) {
             Long until = spotCooldownUntil.get(spot.getId());
             boolean available = until == null || now >= until;
@@ -472,16 +479,16 @@ public final class KothGame {
                 spawnSpotMarker(spot);
             }
 
+            if (!showParticles || !available) continue;
+
             Location loc = spot.getLocation();
             if (loc.getWorld() == null) continue;
 
-            if (available) {
-                loc.getWorld().spawnParticle(
-                        Particle.HAPPY_VILLAGER,
-                        loc.clone().add(0, 0.6, 0),
-                        2, 0.25, 0.15, 0.25, 0.01
-                );
-            }
+            loc.getWorld().spawnParticle(
+                    Particle.HAPPY_VILLAGER,
+                    loc.clone().add(0, 0.6, 0),
+                    2, 0.25, 0.15, 0.25, 0.01
+            );
         }
 
         for (KothPlayerState ps : players.values()) {
@@ -587,12 +594,8 @@ public final class KothGame {
             ps.setAlive(true);
             ps.setRespawnAtMs(0L);
 
-            if (p.getGameMode() == GameMode.SPECTATOR) {
-                try {
-                    p.setSpectatorTarget(null);
-                } catch (Throwable ignored) {
-                }
-            }
+            PlayerRespawnUtil.forceRespawnIfDead(p);
+            PlayerRespawnUtil.clearSpectatorState(p);
             for (Player other : Bukkit.getOnlinePlayers()) {
                 p.showPlayer(plugin, other);
                 other.showPlayer(plugin, p);
@@ -600,7 +603,7 @@ public final class KothGame {
 
             Location spawn = config.getSpawn();
             if (spawn != null) {
-                p.teleport(spawn);
+                plugin.getTeleporter().teleport(p, spawn);
             }
             giveKit(p);
 
@@ -639,11 +642,7 @@ public final class KothGame {
         ps.incrementDeaths();
         ps.setRespawnAtMs(System.currentTimeMillis() + SPECTATOR_RESPAWN_MS);
 
-        player.getInventory().clear();
-        player.setHealth(20.0);
-        player.setGameMode(GameMode.SPECTATOR);
-        player.setFireTicks(0);
-        player.setFallDistance(0f);
+        PlayerRespawnUtil.forceRespawnIfDead(player);
 
         Location loc = player.getLocation();
         loc.getWorld().spawnParticle(Particle.SMOKE, loc, 20, 0.4, 0.5, 0.4, 0.02);
@@ -811,12 +810,7 @@ public final class KothGame {
     }
 
     private void restorePlayer(Player player, KothPlayerState ps, boolean teleport) {
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try {
-                player.setSpectatorTarget(null);
-            } catch (Throwable ignored) {
-            }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         for (Player other : Bukkit.getOnlinePlayers()) {
             player.showPlayer(plugin, other);
             other.showPlayer(plugin, player);
@@ -824,11 +818,6 @@ public final class KothGame {
 
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
 
         player.setFireTicks(0);
@@ -839,7 +828,7 @@ public final class KothGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

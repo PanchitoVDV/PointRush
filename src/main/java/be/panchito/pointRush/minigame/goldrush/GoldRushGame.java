@@ -1,6 +1,7 @@
 package be.panchito.pointRush.minigame.goldrush;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
@@ -114,6 +115,7 @@ public final class GoldRushGame {
                 .build()));
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
