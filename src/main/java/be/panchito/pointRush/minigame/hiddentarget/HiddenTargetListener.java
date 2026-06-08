@@ -68,9 +68,13 @@ public final class HiddenTargetListener implements Listener {
                 event.setRespawnLocation(respawn);
             }
             game.getPlugin().getServer().getScheduler().runTask(game.getPlugin(), () -> {
-                if (player.isOnline()) {
-                    player.setGameMode(GameMode.SPECTATOR);
-                }
+                if (!player.isOnline()) return;
+                // event may have ended between respawn and now - never strand outside an event
+                if (!game.isParticipant(player.getUniqueId()) || game.getState() == HiddenTargetGame.State.IDLE) return;
+                player.getInventory().clear();
+                player.setFireTicks(0);
+                player.setFallDistance(0f);
+                player.setGameMode(GameMode.SPECTATOR);
             });
         }
     }
@@ -133,7 +137,7 @@ public final class HiddenTargetListener implements Listener {
             player.setFallDistance(0f);
             player.setFireTicks(0);
             if (game.getConfig().getSpawn() != null) {
-                player.teleport(game.getConfig().getSpawn());
+                game.getPlugin().getTeleporter().teleport(player, game.getConfig().getSpawn());
             }
         }
     }

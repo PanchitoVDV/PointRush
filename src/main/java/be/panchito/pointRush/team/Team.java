@@ -1,6 +1,7 @@
 package be.panchito.pointRush.team;
 
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Location;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -22,6 +23,8 @@ public final class Team {
     private final Set<UUID> members = new LinkedHashSet<>();
     private NamedTextColor color;
     private long points;
+    /** Shared team teleport target set via /team sethome; null when unset. */
+    private Location home;
 
     public Team(UUID id, String name, UUID leader, NamedTextColor color) {
         this.id = id;
@@ -108,5 +111,13 @@ public final class Team {
 
     public void removePoints(long amount) {
         this.points = Math.max(0, this.points - amount);
+    }
+
+    public Location getHome() {
+        return home != null ? home.clone() : null;
+    }
+
+    public void setHome(Location home) {
+        this.home = home != null ? home.clone() : null;
     }
 }

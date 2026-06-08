@@ -26,14 +26,14 @@ public enum KothSpotType {
     TWIST_ROD("twist", Material.BLAZE_ROD, "Warrelstok"),
     INK_BLOB("ink", Material.INK_SAC, "Inktfles"),
     GOO_BALL("goo", Material.SLIME_BALL, "Plakbal"),
-    SPARK_ROD("spark", Material.COPPER_INGOT, "Donderstaaf"),
+    SPRING_STICK("spring", Material.RABBIT_FOOT, "Springstok"),
     CHAOS_FRUIT("chaos", Material.POPPED_CHORUS_FRUIT, "Duizelbes");
 
     private static final List<MinigameGadgetType> TROLL_POOL = List.of(
             MinigameGadgetType.TWIST_ROD,
             MinigameGadgetType.INK_BLOB,
             MinigameGadgetType.GOO_BALL,
-            MinigameGadgetType.SPARK_ROD,
+            MinigameGadgetType.SPRING_STICK,
             MinigameGadgetType.CHAOS_FRUIT
     );
 
@@ -41,7 +41,7 @@ public enum KothSpotType {
             MinigameGadgetType.TWIST_ROD,
             MinigameGadgetType.INK_BLOB,
             MinigameGadgetType.GOO_BALL,
-            MinigameGadgetType.SPARK_ROD,
+            MinigameGadgetType.SPRING_STICK,
             MinigameGadgetType.CHAOS_FRUIT,
             MinigameGadgetType.TURBO_FUNGUS
     );
@@ -71,6 +71,9 @@ public enum KothSpotType {
     public static KothSpotType fromConfig(String raw) {
         if (raw == null || raw.isBlank()) return RANDOM;
         String key = raw.trim().toLowerCase(Locale.ROOT);
+        if (key.equals("spark") || key.equals("spark_rod")) {
+            return SPRING_STICK;
+        }
         for (KothSpotType type : values()) {
             if (type.configKey.equals(key) || type.name().equalsIgnoreCase(key)) {
                 return type;
@@ -104,7 +107,7 @@ public enum KothSpotType {
             case TWIST_ROD -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.TWIST_ROD);
             case INK_BLOB -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.INK_BLOB);
             case GOO_BALL -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.GOO_BALL);
-            case SPARK_ROD -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.SPARK_ROD);
+            case SPRING_STICK -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.SPRING_STICK);
             case CHAOS_FRUIT -> MinigameGadgetItems.createStack(plugin, MinigameGadgetType.CHAOS_FRUIT);
         };
     }

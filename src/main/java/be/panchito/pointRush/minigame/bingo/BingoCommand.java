@@ -158,7 +158,8 @@ public final class BingoCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (!config.isReady()) {
-            sender.sendMessage(Messages.error("Material pool te klein (min 24 items)."));
+            sender.sendMessage(Messages.error("Material pool te klein (min "
+                    + BingoGrid.RANDOM_SLOTS + " items)."));
             return;
         }
         if (!game.start()) {

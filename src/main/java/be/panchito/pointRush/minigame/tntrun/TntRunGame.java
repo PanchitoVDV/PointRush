@@ -1,6 +1,7 @@
 package be.panchito.pointRush.minigame.tntrun;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetMode;
 import be.panchito.pointRush.shop.MinigameShopHook;
@@ -9,7 +10,9 @@ import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.MinigameText;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
@@ -25,7 +28,6 @@ import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
@@ -162,6 +164,9 @@ public final class TntRunGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan TNT Run (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -181,6 +186,7 @@ public final class TntRunGame {
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.4f);
         startCountdown();
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -224,21 +230,14 @@ public final class TntRunGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
         TntRunPlayerState ps = new TntRunPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
         MinigameShopHook.applyTntRunJoin(plugin, player, ps);
 
-        player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -247,7 +246,7 @@ public final class TntRunGame {
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_RUN);
         scoreboard.attach(player);
@@ -410,7 +409,7 @@ public final class TntRunGame {
                 Title.Times.times(Duration.ofMillis(150), Duration.ofMillis(1500), Duration.ofMillis(300))
         ));
         if (config.getSpawn() != null) {
-            try { player.teleport(config.getSpawn()); } catch (Exception ignored) { }
+            plugin.getTeleporter().teleport(player, config.getSpawn());
         }
 
         Component msg;
@@ -604,15 +603,9 @@ public final class TntRunGame {
     }
 
     private void restorePlayer(Player player, TntRunPlayerState ps, boolean teleport) {
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try { player.setSpectatorTarget(null); } catch (Throwable ignored) { }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
         player.setFireTicks(0);
         player.setFallDistance(0f);
@@ -623,7 +616,7 @@ public final class TntRunGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

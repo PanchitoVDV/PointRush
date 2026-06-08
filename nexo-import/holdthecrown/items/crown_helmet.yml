@@ -1,0 +1,9 @@
+# Hold the Crown — Nexo kroon item (HEAD slot)
+crown_helmet:
+  itemname: Crown
+  material: PAPER
+  Pack:
+    model: nations:crown_helmet
+  Components:
+    equippable:
+      slot: HEAD

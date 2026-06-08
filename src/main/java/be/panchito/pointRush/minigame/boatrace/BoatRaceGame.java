@@ -1,12 +1,15 @@
 package be.panchito.pointRush.minigame.boatrace;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.MinigameText;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
@@ -23,7 +26,6 @@ import org.bukkit.World;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
@@ -54,6 +56,7 @@ public final class BoatRaceGame {
     public static final double TOUCH_RADIUS_SQ = 25.0;
     public static final long POLL_INTERVAL_TICKS = 3L;
 
+    private static final Vector ZERO_VELOCITY = new Vector(0, 0, 0);
     public static final long RACELINE_INTERVAL_TICKS = 15L;
     private static final double RACELINE_STEP_BLOCKS = 2.5;
     private static final int RACELINE_MAX_POINTS = 40;
@@ -143,6 +146,9 @@ public final class BoatRaceGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan de bootrace (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             candidates.add(online);
         }
 
@@ -185,6 +191,7 @@ public final class BoatRaceGame {
             startCountdown();
         }
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -251,12 +258,6 @@ public final class BoatRaceGame {
             return false;
         }
 
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
-
         Boat boat = spawnBoat(slot);
         if (boat == null) {
             plugin.getLogger().warning("Kon geen boot spawnen voor " + player.getName());
@@ -267,14 +268,12 @@ public final class BoatRaceGame {
                 player.getUniqueId(),
                 player.getLocation().clone(),
                 player.getGameMode(),
-                saved,
                 slotIndex,
                 boat.getUniqueId()
         );
         players.put(player.getUniqueId(), ps);
         spawnedBoats.add(boat.getUniqueId());
 
-        player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -337,8 +336,15 @@ public final class BoatRaceGame {
             Location slot = grid.get(ps.getGridSlot());
             Boat boat = findBoat(ps);
             if (boat == null || slot == null) continue;
-            boat.teleport(slot);
-            boat.setVelocity(new Vector(0, 0, 0));
+            // Alleen ingrijpen als de boot echt van zijn grid-plek is gegleden; een teleport +
+            // velocity-reset elke tick is duur en meestal overbodig (de boot staat al stil).
+            Location current = boat.getLocation();
+            if (current.getWorld() == slot.getWorld() && current.distanceSquared(slot) > 0.01) {
+                boat.teleport(slot);
+                boat.setVelocity(ZERO_VELOCITY);
+            } else if (!boat.getVelocity().isZero()) {
+                boat.setVelocity(ZERO_VELOCITY);
+            }
         }
     }
 
@@ -669,12 +675,12 @@ public final class BoatRaceGame {
         player.setGameMode(GameMode.SPECTATOR);
         if (config.getFinish() != null) {
             try {
-                player.teleport(config.getFinish());
+                plugin.getTeleporter().teleport(player, config.getFinish());
             } catch (Exception ignored) {
             }
         } else if (config.getLobbySpawn() != null) {
             try {
-                player.teleport(config.getLobbySpawn());
+                plugin.getTeleporter().teleport(player, config.getLobbySpawn());
             } catch (Exception ignored) {
             }
         }
@@ -715,19 +721,9 @@ public final class BoatRaceGame {
 
     private void restorePlayer(Player player, BoatRacePlayerState ps, boolean teleport) {
         ejectAndRemoveBoat(player, ps);
-
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try {
-                player.setSpectatorTarget(null);
-            } catch (Throwable ignored) {
-            }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
         player.setFireTicks(0);
         player.setFallDistance(0f);
@@ -736,7 +732,7 @@ public final class BoatRaceGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

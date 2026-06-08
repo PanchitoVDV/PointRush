@@ -1,11 +1,11 @@
 package be.panchito.pointRush.minigame.koth;
 
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetEngine;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetInteract;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
-import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -65,9 +65,13 @@ public final class KothListener implements Listener {
                 event.setRespawnLocation(game.getConfig().getSpawn());
             }
             game.getPlugin().getServer().getScheduler().runTask(game.getPlugin(), () -> {
-                if (player.isOnline()) {
-                    player.setGameMode(GameMode.SPECTATOR);
-                }
+                if (!player.isOnline()) return;
+                // event may have ended between respawn and now - never strand outside an event
+                if (!game.isParticipant(player.getUniqueId()) || game.getState() == KothGame.State.IDLE) return;
+                player.getInventory().clear();
+                player.setFireTicks(0);
+                player.setFallDistance(0f);
+                player.setGameMode(GameMode.SPECTATOR);
             });
         }
     }
@@ -120,7 +124,7 @@ public final class KothListener implements Listener {
             player.setFallDistance(0f);
             player.setFireTicks(0);
             if (game.getConfig().getSpawn() != null) {
-                player.teleport(game.getConfig().getSpawn());
+                game.getPlugin().getTeleporter().teleport(player, game.getConfig().getSpawn());
             }
         }
     }
@@ -156,16 +160,13 @@ public final class KothListener implements Listener {
             return;
         }
 
-        ItemStack item = event.getItem();
+        ItemStack item = MinigameGadgetInteract.itemInHand(event);
         if (item == null || item.getType().isAir()) return;
 
         if (MinigameGadgetEngine.tryKoth(game.getPlugin(), game, player, item, event.getHand())
                 != MinigameGadgetEngine.Result.NOT_OURS) {
             event.setCancelled(true);
-            event.setUseItemInHand(Event.Result.DENY);
-            if (action == Action.RIGHT_CLICK_BLOCK) {
-                event.setUseInteractedBlock(Event.Result.DENY);
-            }
+            MinigameGadgetInteract.denyVanillaUse(event);
         }
     }
 

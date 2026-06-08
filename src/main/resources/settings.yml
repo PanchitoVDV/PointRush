@@ -1,6 +1,40 @@
 # PointRush central settings (must be UTF-8).
 # Team names, points and member UUIDs are stored in MongoDB.
 
+# Hoofd-/lobbywereld: alleen spelers in deze wereld worden bij de start van een minigame-event
+# opgepakt en naar de arena-spawn geteleporteerd (na afloop terug naar hun plek hier).
+# Vul hier de exacte naam van je hub-/lobbywereld in. Standaard "world".
+lobby-world: world
+
+# Ultimate UI profielmenu (/profile) — placeholders %pointrush_...%
+profile:
+  website-url: https://cloudito.cloud
+
+# Ultimate UI overlay bij minigame-start (kopieer ui/pages/transition.yml naar UltimateUI/pages/)
+minigame-transition:
+  enabled: true
+  page: transition
+  auto-close: true
+  # Exacte pluginnaam uit /plugins (leeg = automatisch zoeken)
+  plugin-name: UltimateUI
+  # Ultimate UI page id (name in transition.yml)
+  # Gebruikt: UltimateUIAPI.get().openGui(players, page, hud=true, autoClose)
+
+# Live Ultimate UI scorebord-HUD tijdens minigames (kopieer ui/pages/stats_display.yml naar UltimateUI/pages/)
+minigame-hud:
+  enabled: true
+  page: stats_display
+  # Hoe vaak (in ticks) de HUD herladen wordt zodat placeholders live updaten (300 = 1x per 15 seconden).
+  # Zet op 0 als Ultimate UI placeholders zelf al ververst en je flikkering ziet.
+  refresh-ticks: 300
+  # Inhoud komt uit PlaceholderAPI-placeholders in stats_display.yml:
+  #   %pointrush_hud_timer%      verstreken tijd (mm:ss)
+  #   %pointrush_hud_score%      teampunten
+  #   %pointrush_hud_players%    actieve spelers
+  #   %pointrush_hud_rank%       team-ranking (#n)
+  #   %pointrush_hud_event%      event-melding
+  #   %pointrush_hud_objective%  naam van de actieve minigame
+
 mongodb:
   uri: mongodb://localhost:27017
   database: pointrush
@@ -56,6 +90,22 @@ ctf:
   rounds: 2
   pointsPerCapture: 75
   deliveryRadius: 3.0
+
+holdthecrown:
+  pointSeconds: 60
+  durationMinutes: 30
+  pickupRadius: 3.0
+
+bossevent:
+  playersPerArena: 20
+  arenaRounds: 3
+  roundTimeoutMinutes: 15
+  intermissionSeconds: 8
+  survivorPoints: 100
+  finalBonusPoints: 50
+  finalConsolationPoints: 25
+  arenas: {}
+  final: {}
 
 race: {}
 

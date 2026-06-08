@@ -7,6 +7,9 @@ import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bson.Document;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -63,12 +66,22 @@ public final class MongoTeamRepository {
 
     private static Document toDocument(Team team) {
         List<String> memberStrings = team.getMembers().stream().map(UUID::toString).toList();
-        return new Document("_id", team.getId().toString())
+        Document doc = new Document("_id", team.getId().toString())
                 .append("name", team.getName())
                 .append("leader", team.getLeader().toString())
                 .append("color", team.getColor().toString())
                 .append("points", team.getPoints())
                 .append("members", memberStrings);
+        Location home = team.getHome();
+        if (home != null && home.getWorld() != null) {
+            doc.append("home", new Document("world", home.getWorld().getName())
+                    .append("x", home.getX())
+                    .append("y", home.getY())
+                    .append("z", home.getZ())
+                    .append("yaw", (double) home.getYaw())
+                    .append("pitch", (double) home.getPitch()));
+        }
+        return doc;
     }
 
     private static Team fromDocument(Document doc) {
@@ -110,6 +123,24 @@ public final class MongoTeamRepository {
                 }
             }
         }
+
+        if (doc.get("home") instanceof Document home) {
+            String worldName = home.getString("world");
+            World world = worldName != null ? Bukkit.getWorld(worldName) : null;
+            if (world != null) {
+                team.setHome(new Location(
+                        world,
+                        asDouble(home.get("x")),
+                        asDouble(home.get("y")),
+                        asDouble(home.get("z")),
+                        (float) asDouble(home.get("yaw")),
+                        (float) asDouble(home.get("pitch"))));
+            }
+        }
         return team;
+    }
+
+    private static double asDouble(Object value) {
+        return value instanceof Number n ? n.doubleValue() : 0.0;
     }
 }

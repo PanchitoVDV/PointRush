@@ -12,6 +12,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -20,6 +21,8 @@ import org.bukkit.event.block.Action;
 import org.bukkit.inventory.ItemStack;
 
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetEngine;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetInteract;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 
 /**
  * Glues Bukkit events into {@link TntTagGame}.
@@ -72,7 +75,7 @@ public final class TntTagListener implements Listener {
             if (game.getConfig().getSpawn() != null) {
                 player.setFallDistance(0f);
                 player.setFireTicks(0);
-                player.teleport(game.getConfig().getSpawn());
+                game.getPlugin().getTeleporter().teleport(player, game.getConfig().getSpawn());
             }
             return;
         }
@@ -97,20 +100,18 @@ public final class TntTagListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
 
-        Action action = event.getAction();
-        boolean rightClick = action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
-        if (!rightClick) {
-            if (action == Action.PHYSICAL) return;
+        if (!MinigameGadgetInteract.isRightClick(event)) {
+            if (event.getAction() == Action.PHYSICAL) return;
             event.setCancelled(true);
             return;
         }
 
-        ItemStack item = event.getItem();
+        ItemStack item = MinigameGadgetInteract.itemInHand(event);
         if (item == null) {
             event.setCancelled(true);
             return;
@@ -118,6 +119,16 @@ public final class TntTagListener implements Listener {
 
         if (MinigameGadgetEngine.tryTntTag(game.getPlugin(), game, player, item, event.getHand())
                 != MinigameGadgetEngine.Result.NOT_OURS) {
+            event.setCancelled(true);
+            MinigameGadgetInteract.denyVanillaUse(event);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        if (MinigameGadgetItems.parse(game.getPlugin(), event.getItem()) != null) {
             event.setCancelled(true);
         }
     }

@@ -1,0 +1,15 @@
+Capture the Flag — Nexo vlag (bl_flag_1)
+
+1. Kopieer naar je Nexo-server:
+   nexo-import/ctf/items/  ->  plugins/Nexo/items/   (merge)
+
+2. Zorg dat het resource pack-model bojarsky_legacy:town_props_furniture/bl_flag_1
+   al in je pack zit (bojarsky_legacy pack).
+
+3. Herlaad Nexo:
+   /nexo reload
+
+4. Test:
+   /nexo give <speler> bl_flag_1
+
+PointRush gebruikt automatisch Nexo-id "bl_flag_1" tijdens CTF-events.

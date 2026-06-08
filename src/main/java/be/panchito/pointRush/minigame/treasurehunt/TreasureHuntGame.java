@@ -1,6 +1,7 @@
 package be.panchito.pointRush.minigame.treasurehunt;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.util.Messages;
@@ -110,6 +111,7 @@ public final class TreasureHuntGame {
         }
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 

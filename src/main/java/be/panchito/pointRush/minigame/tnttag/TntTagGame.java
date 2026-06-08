@@ -1,6 +1,7 @@
 package be.panchito.pointRush.minigame.tnttag;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetMode;
 import be.panchito.pointRush.shop.MinigameShopHook;
@@ -9,7 +10,9 @@ import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -71,9 +74,17 @@ public final class TntTagGame {
     public static final int INTERMISSION_SECONDS = 4;
     /** Hard cap so an event never hangs forever (15 min). */
     public static final long EVENT_TIMEOUT_TICKS = 15L * 60L * 20L;
-    public static final double TAG_REACH = 3.0;
+    /**
+     * Sanity reach guard for a tag pass. The vanilla server already validates melee
+     * reach to the victim's hitbox before {@code EntityDamageByEntityEvent} fires, so
+     * this only needs to reject obviously bogus / injected hits. Kept generous and
+     * height-tolerant so legitimate hits while jumping or at the edge of the hitbox
+     * are not rejected (which felt like "you have to hit multiple times").
+     */
+    public static final double TAG_REACH = 4.5;
     public static final double TAG_REACH_SQ = TAG_REACH * TAG_REACH;
-    public static final long TAG_COOLDOWN_MS = 1500L;
+    /** How long a freshly-tagged player may not pass the TNT straight back to whoever tagged them. */
+    public static final long TAG_PASSBACK_GUARD_MS = 1000L;
     public static final double INITIAL_TAG_FRACTION = 0.33;
 
     /** Points granted per round survived (per team, per surviving member). */
@@ -96,6 +107,8 @@ public final class TntTagGame {
     private final Map<UUID, Long> gadgetCooldownUntilMs = new ConcurrentHashMap<>();
     private int roundNumber = 0;
     private long roundStartMs = 0L;
+    private long lastTagParticleMs = 0L;
+    private int lastActionBarSecond = -1;
     private long roundDurationMs = 0L;
     private long intermissionEndsMs = 0L;
     private long countdownEndsMs = 0L;
@@ -164,6 +177,9 @@ public final class TntTagGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan TNT Tag (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             joinPlayer(online);
         }
 
@@ -183,6 +199,7 @@ public final class TntTagGame {
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -282,26 +299,14 @@ public final class TntTagGame {
     }
 
     private void joinPlayer(Player player) {
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
-        ItemStack savedHelmet = player.getInventory().getHelmet();
-        if (savedHelmet != null) savedHelmet = savedHelmet.clone();
-
         TntTagPlayerState ps = new TntTagPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
-                player.getGameMode(),
-                saved,
-                savedHelmet
+                player.getGameMode()
         );
         players.put(player.getUniqueId(), ps);
         MinigameShopHook.applyTagJoin(plugin, player, ps);
 
-        player.getInventory().clear();
-        player.getInventory().setHelmet(null);
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -311,7 +316,7 @@ public final class TntTagGame {
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_TAG);
         scoreboard.attach(player);
@@ -361,7 +366,7 @@ public final class TntTagGame {
             for (UUID id : players.keySet()) {
                 Player p = Bukkit.getPlayer(id);
                 if (p != null && p.getLocation().distanceSquared(spawn) > 100.0) {
-                    p.teleport(spawn);
+                    plugin.getTeleporter().teleport(p, spawn);
                 }
             }
         }
@@ -374,8 +379,16 @@ public final class TntTagGame {
         scoreboard.updateBossBar("ronde " + roundNumber + "  ·  " + formatTime(left),
                 progress, BossBar.Color.RED);
 
-        spawnTaggedParticles();
-        broadcastActionBars(secondsLeft);
+        // Particles ~elke 200ms i.p.v. elke tick; action bars alleen bij een seconde-wissel
+        // (ze blijven ~3s zichtbaar, dus elke tick versturen is verspilde packets + Component-bouw).
+        if (now - lastTagParticleMs >= 200L) {
+            lastTagParticleMs = now;
+            spawnTaggedParticles();
+        }
+        if (secondsLeft != lastActionBarSecond) {
+            lastActionBarSecond = secondsLeft;
+            broadcastActionBars(secondsLeft);
+        }
 
         if (now % 1000L < 50L && secondsLeft <= 5 && secondsLeft > 0) {
             playSoundAll(Sound.BLOCK_NOTE_BLOCK_HAT, 1.0f, 2.0f);
@@ -652,7 +665,8 @@ public final class TntTagGame {
             if (p != null && ps.isTagged()) {
                 applyTagged(p, false);
             }
-            ps.setTagCooldownExpiresMs(0L);
+            ps.setLastTaggedBy(null);
+            ps.setPassBackGuardUntilMs(0L);
         }
     }
 
@@ -698,10 +712,13 @@ public final class TntTagGame {
         if (!aState.isTagged() || vState.isTagged()) return false;
 
         long now = System.currentTimeMillis();
-        if (now < aState.getTagCooldownExpiresMs() || now < vState.getTagCooldownExpiresMs()) {
+        // anti ping-pong: can't hand it straight back to whoever just tagged you,
+        // but you CAN tag anyone else immediately
+        if (victim.getUniqueId().equals(aState.getLastTaggedBy())
+                && now < aState.getPassBackGuardUntilMs()) {
             return false;
         }
-        if (attacker.getLocation().distanceSquared(victim.getLocation()) > TAG_REACH_SQ) {
+        if (!withinTagReach(attacker, victim)) {
             return false;
         }
 
@@ -718,9 +735,10 @@ public final class TntTagGame {
         applyTagged(victim, true);
         aState.incrementPasses();
 
-        long cd = now + TAG_COOLDOWN_MS;
-        aState.setTagCooldownExpiresMs(cd);
-        vState.setTagCooldownExpiresMs(cd);
+        // directional guard so the freshly-tagged victim can't bounce the TNT straight
+        // back to the attacker (but may tag anyone else immediately)
+        vState.setLastTaggedBy(attacker.getUniqueId());
+        vState.setPassBackGuardUntilMs(now + TAG_PASSBACK_GUARD_MS);
 
         Location vl = victim.getLocation();
         vl.getWorld().spawnParticle(Particle.EXPLOSION, vl, 1, 0, 0, 0, 0);
@@ -736,6 +754,20 @@ public final class TntTagGame {
                 Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(900), Duration.ofMillis(200))
         ));
         return true;
+    }
+
+    /**
+     * Generous, height-tolerant sanity check on the tag reach. Vanilla already validated
+     * the melee reach to the hitbox; this just guards against bogus/injected hits while
+     * tolerating vertical offset (jumping) so legitimate hits aren't rejected.
+     */
+    private boolean withinTagReach(Player attacker, Player victim) {
+        Location a = attacker.getLocation();
+        Location v = victim.getLocation();
+        if (a.getWorld() == null || !a.getWorld().equals(v.getWorld())) {
+            return false;
+        }
+        return a.distanceSquared(v) <= TAG_REACH_SQ;
     }
 
     private void eliminate(UUID id) {
@@ -810,9 +842,7 @@ public final class TntTagGame {
     }
 
     private void restorePlayer(Player player, TntTagPlayerState ps, boolean teleport) {
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try { player.setSpectatorTarget(null); } catch (Throwable ignored) { }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         for (Player other : Bukkit.getOnlinePlayers()) {
             player.showPlayer(plugin, other);
         }
@@ -823,12 +853,6 @@ public final class TntTagGame {
             player.setGameMode(ps.getSavedGameMode());
         }
 
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
-        }
-        player.getInventory().setHelmet(ps.getSavedHelmet());
-
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
@@ -836,7 +860,7 @@ public final class TntTagGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

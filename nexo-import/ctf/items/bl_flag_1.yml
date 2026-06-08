@@ -1,0 +1,21 @@
+# Capture the Flag — Nexo vlag (offhand + armor stand marker)
+bl_flag_1:
+  itemname: Flag
+  material: PAPER
+  Pack:
+    model: bojarsky_legacy:town_props_furniture/bl_flag_1
+  Mechanics:
+    furniture:
+      limited_placing:
+        roof: false
+        floor: true
+        wall: false
+      properties:
+        display_transform: FIXED
+      restricted_rotation: VERY_STRICT
+      block_sounds:
+        place_sound: block.wood.place
+        break_sound: block.wood.break
+      hitbox:
+        interactions:
+        - 0,0,0 0.2,3

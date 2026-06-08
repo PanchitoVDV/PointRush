@@ -1,7 +1,5 @@
 package be.panchito.pointRush.coins;
 
-import be.panchito.pointRush.storage.DataManager;
-import be.panchito.pointRush.storage.mongo.MongoPlayerCoinRepository;
 import be.panchito.pointRush.util.Messages;
 
 import org.bukkit.Location;
@@ -21,14 +19,14 @@ public final class CoinPickupListener implements Listener {
 
     private final JavaPlugin plugin;
     private final CoinSpawnConfig coinConfig;
-    private final DataManager dataManager;
+    private final CoinTotalCache coinTotalCache;
     private final NexoCoinSpawner spawner;
 
     public CoinPickupListener(JavaPlugin plugin, CoinSpawnConfig coinConfig,
-                             DataManager dataManager, NexoCoinSpawner spawner) {
+                             CoinTotalCache coinTotalCache, NexoCoinSpawner spawner) {
         this.plugin = plugin;
         this.coinConfig = coinConfig;
-        this.dataManager = dataManager;
+        this.coinTotalCache = coinTotalCache;
         this.spawner = spawner;
     }
 
@@ -53,12 +51,9 @@ public final class CoinPickupListener implements Listener {
         event.setCancelled(true);
         entity.remove();
 
-        MongoPlayerCoinRepository repo = dataManager.getPlayerCoinRepository();
-        if (repo == null) {
-            player.sendMessage(Messages.error("Rush-munten zijn nu niet beschikbaar."));
-            return;
-        }
-        repo.incrementCollected(player.getUniqueId(), nexoId, stack.getAmount());
+        // Mongo-write loopt async (virtuele thread) en werkt de niet-blokkerende cache bij;
+        // geen blokkerende DB-call op de hoofd-thread in dit event.
+        coinTotalCache.recordPickup(player.getUniqueId(), nexoId, stack.getAmount());
 
         int slot = CoinItemMarker.readSpawnSlot(plugin, stack);
         if (slot < 0) {

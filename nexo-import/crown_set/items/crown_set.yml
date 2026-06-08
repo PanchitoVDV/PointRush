@@ -1,0 +1,93 @@
+# EliteCreatures — Crown Cosmetic Set (Nexo)
+# Geconverteerd van ItemsAdder/CosmeticsCore naar Nexo item configs.
+
+crown_set_crown_1:
+  itemname: "<gold>Crown"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+    - "<dark_gray>Variant 1"
+  Pack:
+    model: crown_set:crown_1
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:crown_1
+    equippable:
+      slot: HEAD
+      swappable: true
+      dispensable: true
+
+crown_set_crown_2:
+  itemname: "<gold>Crown"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+    - "<dark_gray>Variant 2"
+  Pack:
+    model: crown_set:crown_2
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:crown_2
+    equippable:
+      slot: HEAD
+      swappable: true
+      dispensable: true
+
+crown_set_crown_3:
+  itemname: "<gold>Crown"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+    - "<dark_gray>Variant 3"
+  Pack:
+    model: crown_set:crown_3
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:crown_3
+    equippable:
+      slot: HEAD
+      swappable: true
+      dispensable: true
+
+crown_set_crown_4:
+  itemname: "<gold>Crown"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+    - "<dark_gray>Variant 4"
+  Pack:
+    model: crown_set:crown_4
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:crown_4
+    equippable:
+      slot: HEAD
+      swappable: true
+      dispensable: true
+
+crown_set_crown_5:
+  itemname: "<gold>Crown"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+    - "<dark_gray>Variant 5"
+  Pack:
+    model: crown_set:crown_5
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:crown_5
+    equippable:
+      slot: HEAD
+      swappable: true
+      dispensable: true
+
+crown_set_sceptre:
+  itemname: "<gold>Sceptre"
+  material: PAPER
+  lore:
+    - "<gray>Crown Cosmetic Set"
+  Pack:
+    model: crown_set:sceptre
+    oversized_in_gui: true
+  Components:
+    item_model: crown_set:sceptre

@@ -1,0 +1,256 @@
+name: stats_display
+blocks:
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 763.0
+    y: 23.0
+  size:
+    width: 112.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 884.0
+    y: 23.0
+  size:
+    width: 120.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 1014.0
+    y: 23.0
+  size:
+    width: 86.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 1111.0
+    y: 24.0
+  size:
+    width: 93.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 776.0
+    y: 59.0
+  size:
+    width: 418.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: rounded
+  id: block
+  name: Block
+  layer: 1.0
+  opacity: 106
+  color: '000000'
+  unicode: 
+  position:
+    x: 846.0
+    y: 97.0
+  size:
+    width: 278.0
+    height: 30.0
+  rounding:
+    unicode:
+      tl: <#000000>
+      tr: <#000000>
+      br: <#000000>
+      bl: <#000000>
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: text
+  id: text
+  name: timer
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: left
+  text: <font:default> %pointrush_hud_timer%
+  position:
+    x: 775.0
+    y: 30.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: text
+  id: text
+  name: score
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: left
+  text:  <#c4e4ff>%pointrush_hud_score%
+  position:
+    x: 896.0
+    y: 30.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: text
+  id: text
+  name: players
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: left
+  text:  <#95e553>%pointrush_hud_players%
+  position:
+    x: 1026.0
+    y: 30.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: text
+  id: text
+  name: rank
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: left
+  text:  <#f0d030>%pointrush_hud_rank%
+  position:
+    x: 1123.0
+    y: 31.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  hover:
+    color: none
+- type: text
+  id: text
+  name: event
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: left
+  text:  <#ffffff>%pointrush_hud_event%
+  position:
+    x: 1086.0
+    y: 66.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  text-wrap: 500
+  hover:
+    color: none
+- type: text
+  id: text
+  name: objective
+  layer: 2.0
+  opacity: 255
+  color: ffffff
+  font: default
+  align: center
+  text: <#dbb039><font:default>%pointrush_hud_objective%
+  position:
+    x: 920.0
+    y: 104.0
+  size:
+    width: 128.0
+    height: 128.57142857142856
+  visible: true
+  locked: false
+  text-wrap: 500
+  hover:
+    color: none

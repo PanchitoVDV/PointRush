@@ -11,6 +11,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -19,12 +20,14 @@ import org.bukkit.event.block.Action;
 import org.bukkit.inventory.ItemStack;
 
 import be.panchito.pointRush.minigame.gadgets.MinigameGadgetEngine;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetInteract;
+import be.panchito.pointRush.minigame.gadgets.MinigameGadgetItems;
 
 /**
  * Glues Bukkit events into {@link TntRunGame}.
  *
  * <ul>
- *     <li>Freezes participants during the countdown.</li>
+ *     <li>Lets participants walk freely during the countdown (blocks only decay once running).</li>
  *     <li>Routes movement to the game's decay handler.</li>
  *     <li>Cancels damage, block changes, item drops, etc. while in the event.</li>
  *     <li>On quit, removes the participant so the event can wind down cleanly.</li>
@@ -44,33 +47,34 @@ public final class TntRunListener implements Listener {
         if (!game.isParticipant(player.getUniqueId())) return;
         if (event.getTo() == null) return;
 
-        if (game.getState() == TntRunGame.State.STARTING) {
-            if (event.getFrom().getX() != event.getTo().getX()
-                    || event.getFrom().getY() != event.getTo().getY()
-                    || event.getFrom().getZ() != event.getTo().getZ()) {
-                event.setTo(event.getFrom().clone());
-            }
+        // During the countdown players may walk around freely so they can spread
+        // out instead of stacking on the spawn. Blocks only start decaying once
+        // the game is RUNNING (handleMove no-ops in any other state).
+        if (game.getState() != TntRunGame.State.RUNNING) return;
+        // Puur roteren (zelfde blok) hoeft geen blok-lookups: vallen of lopen verandert altijd
+        // de blok-coördinaat, dus de death-plane- en decay-logica missen niets.
+        org.bukkit.Location from = event.getFrom();
+        org.bukkit.Location to = event.getTo();
+        if (from.getBlockX() == to.getBlockX()
+                && from.getBlockY() == to.getBlockY()
+                && from.getBlockZ() == to.getBlockZ()) {
             return;
         }
-
-        if (game.getState() != TntRunGame.State.RUNNING) return;
         game.handleMove(player);
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
 
-        Action action = event.getAction();
-        boolean rightClick = action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
-        if (!rightClick) {
-            if (action == Action.PHYSICAL) return;
+        if (!MinigameGadgetInteract.isRightClick(event)) {
+            if (event.getAction() == Action.PHYSICAL) return;
             event.setCancelled(true);
             return;
         }
 
-        ItemStack item = event.getItem();
+        ItemStack item = MinigameGadgetInteract.itemInHand(event);
         if (item == null) {
             event.setCancelled(true);
             return;
@@ -78,6 +82,16 @@ public final class TntRunListener implements Listener {
 
         if (MinigameGadgetEngine.tryTntRun(game.getPlugin(), game, player, item, event.getHand())
                 != MinigameGadgetEngine.Result.NOT_OURS) {
+            event.setCancelled(true);
+            MinigameGadgetInteract.denyVanillaUse(event);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onConsume(PlayerItemConsumeEvent event) {
+        Player player = event.getPlayer();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        if (MinigameGadgetItems.parse(game.getPlugin(), event.getItem()) != null) {
             event.setCancelled(true);
         }
     }

@@ -1,13 +1,16 @@
 package be.panchito.pointRush.minigame.race;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.shop.MinigameShopHook;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.MinigameText;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
@@ -23,7 +26,6 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
@@ -183,6 +185,9 @@ public final class RaceGame {
                 online.sendMessage(Messages.warn("Je doet niet mee aan de race (creative/spectator)."));
                 continue;
             }
+            if (!LobbyWorld.contains(plugin, online)) {
+                continue;
+            }
             candidates.add(online);
         }
 
@@ -224,6 +229,7 @@ public final class RaceGame {
             startCountdown();
         }
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -513,24 +519,16 @@ public final class RaceGame {
             return false;
         }
 
-        ItemStack[] inv = player.getInventory().getContents();
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
-
         RacePlayerState ps = new RacePlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
                 player.getGameMode(),
-                saved,
                 slotIndex,
                 plate
         );
         players.put(player.getUniqueId(), ps);
         MinigameShopHook.applyRaceJoin(plugin, player, ps);
 
-        player.getInventory().clear();
         player.setGameMode(GameMode.ADVENTURE);
         player.setHealth(20.0);
         player.setFoodLevel(20);
@@ -744,9 +742,9 @@ public final class RaceGame {
         kickAndDespawn(player, ps);
         player.setGameMode(GameMode.SPECTATOR);
         if (config.getFinish() != null) {
-            try { player.teleport(config.getFinish()); } catch (Exception ignored) { }
+            plugin.getTeleporter().teleport(player, config.getFinish());
         } else if (config.getLobbySpawn() != null) {
-            try { player.teleport(config.getLobbySpawn()); } catch (Exception ignored) { }
+            plugin.getTeleporter().teleport(player, config.getLobbySpawn());
         }
 
         boolean anyStillRacing = false;
@@ -790,16 +788,9 @@ public final class RaceGame {
 
     private void restorePlayer(Player player, RacePlayerState ps, boolean teleport) {
         kickAndDespawn(player, ps);
-
-        if (player.getGameMode() == GameMode.SPECTATOR) {
-            try { player.setSpectatorTarget(null); } catch (Throwable ignored) { }
-        }
+        PlayerRespawnUtil.prepareForRestore(player);
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
         player.setFireTicks(0);
         player.setFallDistance(0f);
@@ -811,7 +802,7 @@ public final class RaceGame {
             return;
         }
         try {
-            player.teleport(ps.getSavedLocation());
+            plugin.getTeleporter().teleport(player, ps.getSavedLocation());
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

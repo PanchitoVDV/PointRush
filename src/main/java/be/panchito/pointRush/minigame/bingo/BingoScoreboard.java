@@ -35,6 +35,8 @@ public final class BingoScoreboard {
             "\u00A7c", "\u00A7d", "\u00A7e"
     };
 
+
+
     private final PointRush plugin;
     private final BingoGame game;
     private final TeamManager teamManager;
@@ -168,6 +170,8 @@ public final class BingoScoreboard {
                     .build());
             shown++;
         }
+
+
 
         lines.add(Component.empty());
         lines.add(Component.text(SmallText.of("klik map voor kaart"), NamedTextColor.DARK_GRAY));

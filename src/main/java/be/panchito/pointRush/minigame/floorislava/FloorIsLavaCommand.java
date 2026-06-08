@@ -29,7 +29,7 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "start", "stop", "info", "setspawn", "pos1", "pos2",
-            "setdeathy", "setlava", "setitems", "reload", "leave", "help"
+            "setdeathy", "setlava", "setitems", "setknock", "reload", "leave", "help"
     );
 
     private final FloorIsLavaGame game;
@@ -76,6 +76,7 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
             case "setdeathy" -> handleSetDeathY(sender, args);
             case "setlava" -> handleSetLavaRise(sender, args);
             case "setitems" -> handleSetItemDrop(sender, args);
+            case "setknock" -> handleSetKnock(sender, args);
             case "reload" -> handleReload(sender);
             default -> sendHelp(sender);
         }
@@ -95,6 +96,7 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(line("/floorislava setdeathy <y>", "Stel de death plane Y in"));
             sender.sendMessage(line("/floorislava setlava <sec>", "Seconden tussen lava-stijging (min 30)"));
             sender.sendMessage(line("/floorislava setitems <sec>", "Seconden tussen random kit-drop (min 10)"));
+            sender.sendMessage(line("/floorislava setknock <horiz> [omhoog]", "Knock-sterkte sneeuwbal/ei (0-3)"));
             sender.sendMessage(line("/floorislava start", "Start het event"));
             sender.sendMessage(line("/floorislava stop", "Stop het event"));
             sender.sendMessage(line("/floorislava reload", "Herlaad config"));
@@ -119,6 +121,8 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.info("Death Y: " + config.getDeathY()));
         sender.sendMessage(Messages.info("Lava stijgt elke: " + config.getLavaRiseSeconds() + "s"));
         sender.sendMessage(Messages.info("Kit drop elke: " + config.getItemDropSeconds() + "s"));
+        sender.sendMessage(Messages.info("Knock-sterkte: horiz " + config.getKnockHorizontal()
+                + " / omhoog " + config.getKnockVertical()));
         if (game.getState() != FloorIsLavaGame.State.IDLE) {
             sender.sendMessage(Messages.info("Spelers: " + game.getAllPlayerStates().size()
                     + " (alive: " + game.aliveCount() + ")"));
@@ -230,6 +234,29 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
         }
         config.setItemDropSeconds(sec);
         sender.sendMessage(Messages.success("Random kit drop elke " + sec + " seconden."));
+    }
+
+    private void handleSetKnock(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Messages.error("Gebruik: /floorislava setknock <horizontaal> [omhoog]"));
+            return;
+        }
+        double horizontal;
+        double vertical;
+        try {
+            horizontal = Double.parseDouble(args[1]);
+            vertical = args.length >= 3 ? Double.parseDouble(args[2]) : config.getKnockVertical();
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(Messages.error("Knock-waarden moeten getallen zijn."));
+            return;
+        }
+        if (horizontal < 0 || horizontal > 3 || vertical < 0 || vertical > 3) {
+            sender.sendMessage(Messages.error("Knock-waarden moeten tussen 0 en 3 liggen."));
+            return;
+        }
+        config.setKnock(horizontal, vertical);
+        sender.sendMessage(Messages.success("Knock-sterkte: horizontaal " + config.getKnockHorizontal()
+                + ", omhoog " + config.getKnockVertical() + "."));
     }
 
     private void handleReload(CommandSender sender) {

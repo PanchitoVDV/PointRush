@@ -189,4 +189,12 @@ public final class EventHistoryManager {
     public EventHistoryEntry get(String id) {
         return id == null ? null : entries.get(id);
     }
+
+    /** Wist alle entries in geheugen en op schijf ({@code events.yml}). */
+    public int clearAll() {
+        int count = entries.size();
+        entries.clear();
+        save();
+        return count;
+    }
 }

@@ -40,6 +40,11 @@ public final class MongoEventRepository {
         }
     }
 
+    /** Verwijdert alle events (stats website). */
+    public long deleteAll() {
+        return events.deleteMany(new Document()).getDeletedCount();
+    }
+
     private static Document toDocument(EventHistoryEntry entry) {
         List<Document> placements = new ArrayList<>();
         for (EventHistoryEntry.Placement p : entry.placements()) {

@@ -26,7 +26,7 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "pointrush.ctf.admin";
 
     private static final List<String> SUBCOMMANDS = List.of(
-            "start", "stop", "info", "setredspawn", "setbluespawn",
+            "start", "stop", "info", "setcastlespawn", "setredspawn", "setbluespawn",
             "setrounds", "setroundduration", "sethidephase", "setcapturepoints", "setcaptureradius",
             "reload", "leave", "help"
     );
@@ -69,6 +69,7 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "start" -> handleStart(sender);
             case "stop" -> handleStop(sender);
+            case "setcastlespawn" -> handleSetCastleSpawn(sender);
             case "setredspawn" -> handleSetSpawn(sender, CtfSide.RED);
             case "setbluespawn" -> handleSetSpawn(sender, CtfSide.BLUE);
             case "setrounds" -> handleSetRounds(sender, args);
@@ -88,8 +89,9 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(line("/ctf info", "Bekijk setup en status"));
         sender.sendMessage(line("/ctf leave", "Verlaat het lopende event"));
         if (Commands.isAdmin(sender, PERMISSION)) {
-            sender.sendMessage(line("/ctf setredspawn", "Rood team spawn (ook afleverpunt voor zoekers)"));
-            sender.sendMessage(line("/ctf setbluespawn", "Blauw team spawn (ook afleverpunt voor zoekers)"));
+            sender.sendMessage(line("/ctf setcastlespawn", "Kasteel — hier teleporteren verstop-teams"));
+            sender.sendMessage(line("/ctf setredspawn", "Rood base camp — afleverpunt vlag"));
+            sender.sendMessage(line("/ctf setbluespawn", "Blauw base camp — afleverpunt vlag"));
             sender.sendMessage(line("/ctf setrounds <aantal>", "Aantal rondes (default 3)"));
             sender.sendMessage(line("/ctf setroundduration <min>", "Duur per ronde (default 5)"));
             sender.sendMessage(line("/ctf sethidephase <sec>", "Verstopfase in seconden (default 60)"));
@@ -113,6 +115,8 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text(SmallText.of("--- PointRush CTF ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
         sender.sendMessage(Messages.info("Status: " + MinigameText.stateLabel(game.getState())));
+        sender.sendMessage(Messages.info("Kasteel: " + locText(config.getCastleSpawn())
+                + (config.getCastleSpawn() == null ? " (auto: hoogste rood/blauw)" : "")));
         sender.sendMessage(Messages.info("Rood spawn: " + locText(config.getRedSpawn())));
         sender.sendMessage(Messages.info("Blauw spawn: " + locText(config.getBlueSpawn())));
         sender.sendMessage(Messages.info("Rondes: " + config.getRounds()));
@@ -120,6 +124,8 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.info("Verstopfase: " + config.getHidePhaseSeconds() + " sec"));
         sender.sendMessage(Messages.info("Punten per winst: " + config.getPointsPerCapture()));
         sender.sendMessage(Messages.info("Capture radius: " + config.getCaptureRadius() + " blok"));
+        sender.sendMessage(Messages.info("Nexo vlag: " + CtfFlagItem.NEXO_ID
+                + (CtfFlagItem.isAvailable() ? " (geladen)" : " (niet gevonden - fallback)")));
         if (game.getState() != CtfGame.State.IDLE) {
             sender.sendMessage(Messages.info("Spelers: " + game.getAllPlayerStates().size()));
             if (game.getState() == CtfGame.State.RUNNING) {
@@ -143,7 +149,7 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (!config.isReady()) {
-            sender.sendMessage(Messages.error("CTF setup niet compleet. Stel rood en blauw spawn in."));
+            sender.sendMessage(Messages.error("CTF setup niet compleet. Stel kasteel + rood/blauw spawn in."));
             return;
         }
         if (!game.start()) {
@@ -159,6 +165,15 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
             return;
         }
         sender.sendMessage(Messages.success("CTF event gestopt."));
+    }
+
+    private void handleSetCastleSpawn(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Messages.error("Alleen spelers kunnen locaties zetten."));
+            return;
+        }
+        config.setCastleSpawn(player.getLocation().clone());
+        player.sendMessage(Messages.success("Kasteel-spawn ingesteld (verstop-teams teleporteren hier)."));
     }
 
     private void handleSetSpawn(CommandSender sender, CtfSide side) {

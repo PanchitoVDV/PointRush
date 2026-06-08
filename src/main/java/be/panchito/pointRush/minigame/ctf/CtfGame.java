@@ -1,12 +1,15 @@
 package be.panchito.pointRush.minigame.ctf;
 
 import be.panchito.pointRush.PointRush;
+import be.panchito.pointRush.minigame.MinigameStartEffects;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
+import be.panchito.pointRush.util.LobbyWorld;
 import be.panchito.pointRush.util.Messages;
+import be.panchito.pointRush.util.PlayerRespawnUtil;
 import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -22,9 +25,10 @@ import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Firework;
+import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -32,7 +36,11 @@ import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Transformation;
+import org.joml.AxisAngle4f;
+import org.joml.Vector3f;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -58,9 +66,8 @@ public final class CtfGame {
     public static final int COUNTDOWN_SECONDS = 10;
     public static final int INTERMISSION_SECONDS = 8;
     public static final int WIN_BONUS_POINTS = 150;
+    public static final long SPECTATOR_RESPAWN_MS = 30L * 1000L;
     public static final double FLAG_INTERACT_RADIUS = 2.5;
-
-    private static final String FLAG_NAME = "Vlag";
 
     private final PointRush plugin;
     private final CtfConfig config;
@@ -132,6 +139,24 @@ public final class CtfGame {
         return players.get(id);
     }
 
+    /**
+     * Teleport-doel tijdens een actieve ronde: verstop-team → kasteel, zoek-team → wacht beneden.
+     * Buiten {@link State#RUNNING} valt terug op teamkleur-spawn.
+     */
+    public Location getParticipantRoundSpawn(UUID playerId) {
+        CtfPlayerState ps = players.get(playerId);
+        if (ps == null) {
+            return null;
+        }
+        int round = Math.max(1, roundNumber);
+        if (state != State.RUNNING && state != State.INTERMISSION) {
+            Location team = config.getRoundTeamSpawn(ps.getSide(), round);
+            return team != null ? team : null;
+        }
+        boolean hiding = ps.getSide() == hidingSide;
+        return config.getRoundSpawn(ps.getSide(), hiding, hidingSide, round);
+    }
+
     public CtfSide getHidingSide() {
         return hidingSide;
     }
@@ -155,6 +180,10 @@ public final class CtfGame {
 
     public boolean isFlagPlanted() {
         return flagPlanted;
+    }
+
+    public boolean isFlagMarker(Entity entity) {
+        return entity != null && flagMarkerId != null && flagMarkerId.equals(entity.getUniqueId());
     }
 
     public Map<CtfSide, Integer> getRoundWins() {
@@ -182,16 +211,16 @@ public final class CtfGame {
     }
 
     public boolean isFlagItem(ItemStack item) {
-        if (item == null || item.getType() != Material.WHITE_BANNER) return false;
-        if (!item.hasItemMeta() || item.getItemMeta().displayName() == null) return false;
-        String plain = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(item.getItemMeta().displayName());
-        return FLAG_NAME.equalsIgnoreCase(plain);
+        return CtfFlagItem.isFlag(item);
     }
 
     public boolean start() {
         if (state != State.IDLE) return false;
         if (!config.isReady()) return false;
+        if (!CtfFlagItem.isAvailable()) {
+            plugin.getLogger().warning("CTF: Nexo item '" + CtfFlagItem.NEXO_ID
+                    + "' niet gevonden — fallback PAPER-vlag wordt gebruikt.");
+        }
 
         state = State.STARTING;
         roundNumber = 0;
@@ -207,6 +236,9 @@ public final class CtfGame {
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.getGameMode() == GameMode.CREATIVE || online.getGameMode() == GameMode.SPECTATOR) {
                 online.sendMessage(Messages.warn("Je doet niet mee aan CTF (creative/spectator)."));
+                continue;
+            }
+            if (!LobbyWorld.contains(plugin, online)) {
                 continue;
             }
             eligible.add(online);
@@ -232,6 +264,7 @@ public final class CtfGame {
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.4f);
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        MinigameStartEffects.onStarted(plugin);
         return true;
     }
 
@@ -242,67 +275,46 @@ public final class CtfGame {
     }
 
     private void assignSides(List<Player> eligible) {
-        Map<UUID, Set<UUID>> teamBuckets = new HashMap<>();
-        for (Player p : eligible) {
-            Team t = teamManager.getTeamOfPlayer(p.getUniqueId());
-            UUID bucket = t != null ? t.getId() : p.getUniqueId();
-            teamBuckets.computeIfAbsent(bucket, k -> new HashSet<>()).add(p.getUniqueId());
-        }
-
-        List<Map.Entry<UUID, Set<UUID>>> sorted = new ArrayList<>(teamBuckets.entrySet());
-        sorted.sort((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()));
-
-        Map<CtfSide, Set<UUID>> sideMembers = new EnumMap<>(CtfSide.class);
-        sideMembers.put(CtfSide.RED, new HashSet<>());
-        sideMembers.put(CtfSide.BLUE, new HashSet<>());
-
-        for (Map.Entry<UUID, Set<UUID>> entry : sorted) {
-            CtfSide assign = sideMembers.get(CtfSide.RED).size() <= sideMembers.get(CtfSide.BLUE).size()
-                    ? CtfSide.RED : CtfSide.BLUE;
-            sideMembers.get(assign).addAll(entry.getValue());
-        }
+        Map<UUID, CtfSide> sides = CtfSideAssigner.assignSides(teamManager, eligible);
 
         for (Player p : eligible) {
-            CtfSide side = sideMembers.get(CtfSide.RED).contains(p.getUniqueId())
-                    ? CtfSide.RED : CtfSide.BLUE;
+            CtfSide side = sides.get(p.getUniqueId());
             CtfPlayerState ps = new CtfPlayerState(
                     p.getUniqueId(),
                     p.getLocation().clone(),
-                    p.getGameMode(),
-                    cloneInventory(p.getInventory().getContents())
+                    p.getGameMode()
             );
             ps.setSide(side);
             players.put(p.getUniqueId(), ps);
         }
     }
 
-    private ItemStack[] cloneInventory(ItemStack[] inv) {
-        ItemStack[] saved = new ItemStack[inv.length];
-        for (int i = 0; i < inv.length; i++) {
-            saved[i] = inv[i] != null ? inv[i].clone() : null;
-        }
-        return saved;
-    }
-
     private void joinPlayer(Player player) {
         CtfPlayerState ps = players.get(player.getUniqueId());
         if (ps == null) return;
 
-        player.getInventory().clear();
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setFireTicks(0);
         player.setFallDistance(0f);
         clearPotionEffects(player);
 
-        Location spawn = config.getSpawn(ps.getSide());
+        Location spawn = config.getRoundTeamSpawn(ps.getSide(), 1);
         if (spawn != null) {
-            player.teleport(spawn);
+            plugin.getTeleporter().teleport(player, spawn);
         }
         giveKit(player, ps.getSide());
         scoreboard.attach(player);
         player.sendMessage(Messages.info("Je zit in team "
                 + ps.getSide().getDisplayName() + " — wisselend verstoppen en zoeken!"));
+    }
+
+    /** Called from {@link CtfListener} after the player has actually respawned. */
+    public void applyRespawnKit(Player player) {
+        CtfPlayerState ps = players.get(player.getUniqueId());
+        if (ps == null) return;
+        clearPotionEffects(player);
+        giveKit(player, ps.getSide());
     }
 
     public void giveKit(Player player, CtfSide side) {
@@ -344,13 +356,7 @@ public final class CtfGame {
     }
 
     public ItemStack createFlagItem() {
-        ItemStack flag = new ItemStack(Material.WHITE_BANNER);
-        flag.editMeta(meta -> {
-            meta.displayName(Component.text(FLAG_NAME, NamedTextColor.GOLD, TextDecoration.BOLD));
-            meta.setUnbreakable(true);
-            meta.addItemFlags(ItemFlag.HIDE_UNBREAKABLE);
-        });
-        return flag;
+        return CtfFlagItem.create();
     }
 
     private void tick() {
@@ -397,16 +403,16 @@ public final class CtfGame {
                         .build()
         );
         playSoundAll(Sound.ENTITY_ENDER_DRAGON_GROWL, 0.5f, 1.4f);
-        launchFirework(config.getSpawn(hidingSide), FireworkEffect.Type.BURST,
+        launchFirework(config.resolveHideSpawn(hidingSide, roundNumber), FireworkEffect.Type.BURST,
                 hidingSide == CtfSide.RED ? Color.RED : Color.BLUE, Color.WHITE);
 
         for (CtfPlayerState ps : players.values()) {
             Player p = Bukkit.getPlayer(ps.getUuid());
             if (p == null) continue;
             if (ps.getSide() == hidingSide) {
-                p.sendMessage(Messages.info("Plant de vlag ergens! Rechtsklik met de vlag in je offhand."));
+                p.sendMessage(Messages.info("Plant de vlag ergens! Rechtsklik met de vlag in je offhand — daarna mag het zoek-team meteen zoeken."));
             } else {
-                p.sendMessage(Messages.info("Wacht tot de verstopfase voorbij is, daarna zoek je de vlag!"));
+                p.sendMessage(Messages.info("Wacht tot de vlag geplant is of de verstopfase voorbij is, daarna mag je zoeken!"));
             }
         }
     }
@@ -415,6 +421,7 @@ public final class CtfGame {
         List<Player> hiders = new ArrayList<>();
         for (CtfPlayerState ps : players.values()) {
             if (ps.getSide() != hidingSide) continue;
+            if (!ps.isAlive()) continue;
             if (exclude != null && ps.getUuid().equals(exclude)) continue;
             Player p = Bukkit.getPlayer(ps.getUuid());
             if (p != null) hiders.add(p);
@@ -422,20 +429,38 @@ public final class CtfGame {
         if (hiders.isEmpty()) return;
 
         Player chosen = hiders.get(ThreadLocalRandom.current().nextInt(hiders.size()));
-        flagCarrier = chosen.getUniqueId();
-        chosen.getInventory().setItemInOffHand(createFlagItem());
+        assignFlagCarrier(chosen);
         chosen.sendMessage(Messages.success("Jij hebt de vlag — plant hem ergens veilig!"));
+    }
+
+    private void assignFlagCarrier(Player player) {
+        if (flagPlanted && flagCarrier == null) {
+            removeFlagMarker();
+        }
+        flagCarrier = player.getUniqueId();
+        player.getInventory().setItemInOffHand(createFlagItem());
+        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 999999, 0, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 999999, 0, false, false, true));
+    }
+
+    private void clearFlagCarrierEffects(Player player) {
+        if (player == null) return;
+        player.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
+        player.removePotionEffect(PotionEffectType.SLOWNESS);
+        player.removePotionEffect(PotionEffectType.GLOWING);
     }
 
     private void respawnAllForRound() {
         for (CtfPlayerState ps : players.values()) {
             ps.setAlive(true);
+            ps.setRespawnAtMs(0L);
             Player p = Bukkit.getPlayer(ps.getUuid());
             if (p == null) continue;
+            PlayerRespawnUtil.clearSpectatorState(p);
             clearPotionEffects(p);
-            Location spawn = config.getSpawn(ps.getSide());
+            Location spawn = getParticipantRoundSpawn(ps.getUuid());
             if (spawn != null) {
-                p.teleport(spawn);
+                plugin.getTeleporter().teleport(p, spawn);
             }
             giveKit(p, ps.getSide());
         }
@@ -453,6 +478,8 @@ public final class CtfGame {
 
         maintainFlagCarrierEffects();
         enforceFlagInOffhand();
+        processRespawns(now);
+        broadcastSpectatorActionBars(now);
 
         long left = Math.max(0L, roundEndsMs - now);
         float progress = Math.min(1f, left / (float) config.getRoundDurationMs());
@@ -497,6 +524,10 @@ public final class CtfGame {
             returnFlagToPlantedLocation();
             return;
         }
+        CtfPlayerState ps = players.get(flagCarrier);
+        if (ps == null || !ps.isAlive()) {
+            return;
+        }
         carrier.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 40, 0, false, false, true));
         carrier.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 40, 0, false, false, true));
     }
@@ -518,7 +549,7 @@ public final class CtfGame {
         if (flagPlanted) return;
 
         CtfPlayerState ps = players.get(player.getUniqueId());
-        if (ps == null || ps.getSide() != hidingSide) return;
+        if (ps == null || !ps.isAlive() || ps.getSide() != hidingSide) return;
         if (!isFlagItem(player.getInventory().getItemInOffHand())) return;
 
         flagPlanted = true;
@@ -534,6 +565,10 @@ public final class CtfGame {
                 .build();
         Bukkit.broadcast(Messages.PREFIX.append(msg));
         playSoundAll(Sound.BLOCK_BEACON_ACTIVATE, 0.7f, 1.2f);
+
+        if (roundPhase == RoundPhase.HIDING) {
+            beginSeekPhase();
+        }
     }
 
     /** Zoek-team pakt geplante vlag op. */
@@ -548,15 +583,11 @@ public final class CtfGame {
         if (flagLoc == null || player.getWorld() != flagLoc.getWorld()) return;
         if (player.getLocation().distanceSquared(flagLoc) > FLAG_INTERACT_RADIUS * FLAG_INTERACT_RADIUS) return;
 
-        flagCarrier = player.getUniqueId();
-        removeFlagMarker();
-        player.getInventory().setItemInOffHand(createFlagItem());
-        player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, 999999, 0, false, false, true));
-        player.addPotionEffect(new PotionEffect(PotionEffectType.GLOWING, 999999, 0, false, false, true));
+        assignFlagCarrier(player);
 
         Component msg = Component.text()
                 .append(Component.text(player.getName(), NamedTextColor.WHITE, TextDecoration.BOLD))
-                .append(Component.text(SmallText.of(" heeft de vlag! Breng hem naar spawn!"), NamedTextColor.GOLD))
+                .append(Component.text(SmallText.of(" heeft de vlag gestolen! Breng hem naar base camp!"), NamedTextColor.GOLD))
                 .build();
         Bukkit.broadcast(Messages.PREFIX.append(msg));
         playSoundAll(Sound.ITEM_TOTEM_USE, 0.7f, 1.2f);
@@ -567,8 +598,8 @@ public final class CtfGame {
         if (flagCarrier == null || !flagCarrier.equals(player.getUniqueId())) return;
 
         CtfPlayerState ps = players.get(player.getUniqueId());
-        if (ps == null || ps.getSide() != seekingSide) return;
-        if (!config.isNearSpawn(seekingSide, player.getLocation())) return;
+        if (ps == null || !ps.isAlive() || ps.getSide() != seekingSide) return;
+        if (!config.isNearSpawn(seekingSide, player.getLocation(), roundNumber)) return;
 
         ps.incrementCaptures();
         endRound(seekingSide, true);
@@ -583,14 +614,14 @@ public final class CtfGame {
         awardRoundPoints(winner);
 
         String reason = captured
-                ? "vlag teruggebracht naar spawn!"
+                ? "vlag teruggebracht naar base camp!"
                 : "tijd verstreken — vlag niet gevonden";
         broadcastTitle(
                 Component.text(winner.getDisplayName(), winner.getTextColor(), TextDecoration.BOLD),
                 Component.text(SmallText.of(reason), NamedTextColor.GRAY)
         );
         playSoundAll(Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8f, 1.0f);
-        launchFirework(config.getSpawn(winner), FireworkEffect.Type.STAR,
+        launchFirework(config.getRoundTeamSpawn(winner, roundNumber), FireworkEffect.Type.STAR,
                 winner == CtfSide.RED ? Color.RED : Color.BLUE, Color.WHITE);
 
         intermissionEndsMs = System.currentTimeMillis() + INTERMISSION_SECONDS * 1000L;
@@ -665,14 +696,39 @@ public final class CtfGame {
         dataManager.save();
     }
 
+    /**
+     * Zoeker doodt vlagdrager tijdens actieve fase — vlag gaat naar de killer.
+     *
+     * @return {@code true} als de vlag is overgenomen
+     */
+    private boolean tryStealFlagFromCarrier(Player victim) {
+        if (state != State.RUNNING || roundPhase != RoundPhase.ACTIVE || !flagPlanted) {
+            return false;
+        }
+        Player killer = victim.getKiller();
+        if (killer == null || !killer.isOnline()) {
+            return false;
+        }
+        CtfPlayerState killerPs = players.get(killer.getUniqueId());
+        if (killerPs == null || !killerPs.isAlive() || killerPs.getSide() != seekingSide) {
+            return false;
+        }
+
+        clearFlagCarrierEffects(victim);
+        assignFlagCarrier(killer);
+
+        Component msg = Component.text()
+                .append(Component.text(killer.getName(), NamedTextColor.WHITE, TextDecoration.BOLD))
+                .append(Component.text(SmallText.of(" heeft de vlag gestolen! Breng hem naar base camp!"), NamedTextColor.GOLD))
+                .build();
+        Bukkit.broadcast(Messages.PREFIX.append(msg));
+        playSoundAll(Sound.ENTITY_ITEM_PICKUP, 0.8f, 0.9f);
+        return true;
+    }
+
     public void returnFlagToPlantedLocation() {
         if (flagCarrier != null) {
-            Player carrier = Bukkit.getPlayer(flagCarrier);
-            if (carrier != null) {
-                carrier.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
-                carrier.removePotionEffect(PotionEffectType.SLOWNESS);
-                carrier.removePotionEffect(PotionEffectType.GLOWING);
-            }
+            clearFlagCarrierEffects(Bukkit.getPlayer(flagCarrier));
         }
         flagCarrier = null;
 
@@ -690,10 +746,7 @@ public final class CtfGame {
     /** Hider die de vlag nog niet geplant had — geef aan andere hider. */
     private void returnUnplantedFlag(UUID exclude) {
         if (flagCarrier != null) {
-            Player carrier = Bukkit.getPlayer(flagCarrier);
-            if (carrier != null) {
-                carrier.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
-            }
+            clearFlagCarrierEffects(Bukkit.getPlayer(flagCarrier));
         }
         flagCarrier = null;
         if (state == State.RUNNING && !flagPlanted) {
@@ -713,16 +766,22 @@ public final class CtfGame {
         removeFlagMarker();
         if (loc == null || loc.getWorld() == null) return;
 
-        ArmorStand stand = loc.getWorld().spawn(loc.clone().add(0, -0.4, 0), ArmorStand.class, as -> {
-            as.setVisible(false);
-            as.setGravity(false);
-            as.setMarker(true);
-            as.setInvulnerable(true);
-            as.setCustomNameVisible(false);
-            as.setSmall(true);
-            as.getEquipment().setHelmet(createFlagItem());
+        Location spawnLoc = loc.clone().add(0, 0.15, 0);
+        ItemDisplay display = spawnLoc.getWorld().spawn(spawnLoc, ItemDisplay.class, d -> {
+            d.setItemStack(createFlagItem());
+            d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.FIXED);
+            d.setBillboard(Display.Billboard.FIXED);
+            d.setPersistent(false);
+            d.setInvulnerable(true);
+            d.setGravity(false);
+            d.setTransformation(new Transformation(
+                    new Vector3f(0f, 0.35f, 0f),
+                    new AxisAngle4f(0f, 0f, 1f, 0f),
+                    new Vector3f(1.4f, 1.4f, 1.4f),
+                    new AxisAngle4f(0f, 0f, 1f, 0f)
+            ));
         });
-        flagMarkerId = stand.getUniqueId();
+        flagMarkerId = display.getUniqueId();
     }
 
     private void removeFlagMarker() {
@@ -737,6 +796,52 @@ public final class CtfGame {
         flagMarkerId = null;
     }
 
+    private void processRespawns(long now) {
+        for (CtfPlayerState ps : players.values()) {
+            if (ps.isAlive() || ps.getRespawnAtMs() <= 0L) continue;
+            if (now < ps.getRespawnAtMs()) continue;
+
+            Player p = Bukkit.getPlayer(ps.getUuid());
+            if (p == null) continue;
+
+            ps.setAlive(true);
+            ps.setRespawnAtMs(0L);
+
+            PlayerRespawnUtil.forceRespawnIfDead(p);
+            PlayerRespawnUtil.clearSpectatorState(p);
+            for (Player other : Bukkit.getOnlinePlayers()) {
+                p.showPlayer(plugin, other);
+                other.showPlayer(plugin, p);
+            }
+
+            Location spawn = getParticipantRoundSpawn(ps.getUuid());
+            if (spawn != null) {
+                plugin.getTeleporter().teleport(p, spawn);
+            }
+            giveKit(p, ps.getSide());
+
+            p.showTitle(Title.title(
+                    Component.text(SmallText.of("RESPAWN!"), NamedTextColor.GREEN, TextDecoration.BOLD),
+                    Component.text(SmallText.of("team " + ps.getSide().getDisplayName()), ps.getSide().getTextColor()),
+                    Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(1200), Duration.ofMillis(200))
+            ));
+            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.2f);
+        }
+    }
+
+    private void broadcastSpectatorActionBars(long now) {
+        for (CtfPlayerState ps : players.values()) {
+            if (ps.isAlive() || ps.getRespawnAtMs() <= 0L) continue;
+            Player p = Bukkit.getPlayer(ps.getUuid());
+            if (p == null) continue;
+            long left = Math.max(0L, ps.getRespawnAtMs() - now);
+            p.sendActionBar(Component.text()
+                    .append(Component.text(SmallText.of("spectator · respawn in "), NamedTextColor.GRAY))
+                    .append(Component.text(formatTime(left), NamedTextColor.GOLD, TextDecoration.BOLD))
+                    .build());
+        }
+    }
+
     public void handleDeath(Player player) {
         if (state != State.RUNNING && state != State.STARTING) return;
         CtfPlayerState ps = players.get(player.getUniqueId());
@@ -746,32 +851,40 @@ public final class CtfGame {
         boolean hadFlag = flagCarrier != null && flagCarrier.equals(player.getUniqueId());
 
         if (hadFlag) {
-            if (flagPlanted) {
+            if (tryStealFlagFromCarrier(player)) {
+                // vlag overgenomen door killer
+            } else if (flagPlanted) {
                 returnFlagToPlantedLocation();
             } else {
                 returnUnplantedFlag(player.getUniqueId());
             }
         }
 
-        player.getInventory().clear();
-        player.setHealth(20.0);
-        player.setFireTicks(0);
-        player.setFallDistance(0f);
-        clearPotionEffects(player);
+        ps.setAlive(false);
+        ps.setRespawnAtMs(System.currentTimeMillis() + SPECTATOR_RESPAWN_MS);
 
-        Location spawn = config.getSpawn(ps.getSide());
-        if (spawn != null) {
-            player.teleport(spawn);
+        PlayerRespawnUtil.forceRespawnIfDead(player);
+
+        Location loc = player.getLocation();
+        if (loc.getWorld() != null) {
+            loc.getWorld().spawnParticle(Particle.SMOKE, loc, 20, 0.4, 0.5, 0.4, 0.02);
+            loc.getWorld().playSound(loc, Sound.ENTITY_PLAYER_DEATH, 1.0f, 1.0f);
         }
-        giveKit(player, ps.getSide());
 
         Component announce = Component.text()
                 .append(Component.text(player.getName(), NamedTextColor.WHITE))
                 .append(Component.text(SmallText.of(" is gevallen ("), NamedTextColor.GRAY))
                 .append(Component.text(ps.getSide().getDisplayName(), ps.getSide().getTextColor()))
-                .append(Component.text(hadFlag ? SmallText.of(") · vlag terug!") : SmallText.of(")"), NamedTextColor.GRAY))
+                .append(Component.text(SmallText.of(hadFlag ? ") · vlag terug! · respawn 30s" : ") · respawn 30s"),
+                        NamedTextColor.GRAY))
                 .build();
         Bukkit.broadcast(Messages.PREFIX.append(announce));
+
+        player.showTitle(Title.title(
+                Component.text(SmallText.of("DOOD"), NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text(SmallText.of("spectator 30 seconden"), NamedTextColor.GRAY),
+                Title.Times.times(Duration.ofMillis(150), Duration.ofMillis(1500), Duration.ofMillis(300))
+        ));
     }
 
     public boolean sameSide(UUID a, UUID b) {
@@ -846,13 +959,10 @@ public final class CtfGame {
     }
 
     private void restorePlayer(Player player, CtfPlayerState ps, boolean teleport) {
+        PlayerRespawnUtil.prepareForRestore(player);
         clearPotionEffects(player);
         if (ps.getSavedGameMode() != null) {
             player.setGameMode(ps.getSavedGameMode());
-        }
-        player.getInventory().clear();
-        if (ps.getSavedInventory() != null) {
-            player.getInventory().setContents(ps.getSavedInventory());
         }
         player.setFireTicks(0);
         player.setFallDistance(0f);
@@ -860,7 +970,7 @@ public final class CtfGame {
 
         if (teleport && ps.getSavedLocation() != null && ps.getSavedLocation().getWorld() != null) {
             try {
-                player.teleport(ps.getSavedLocation());
+                plugin.getTeleporter().teleport(player, ps.getSavedLocation());
                 player.setFallDistance(0f);
                 player.sendActionBar(Messages.info("Terug naar je startlocatie."));
                 player.playSound(ps.getSavedLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);

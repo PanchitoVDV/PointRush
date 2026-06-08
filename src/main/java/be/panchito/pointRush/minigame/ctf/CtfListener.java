@@ -2,7 +2,6 @@ package be.panchito.pointRush.minigame.ctf;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -59,12 +58,23 @@ public final class CtfListener implements Listener {
         if (!game.isParticipant(player.getUniqueId())) return;
 
         CtfPlayerState ps = game.getPlayerState(player.getUniqueId());
-        if (ps != null) {
-            Location spawn = game.getConfig().getSpawn(ps.getSide());
-            if (spawn != null) {
-                event.setRespawnLocation(spawn);
-            }
+        if (ps == null) return;
+
+        Location spawn = game.getParticipantRoundSpawn(player.getUniqueId());
+        if (spawn != null) {
+            event.setRespawnLocation(spawn);
         }
+        game.getPlugin().getServer().getScheduler().runTask(game.getPlugin(), () -> {
+            if (!player.isOnline() || !game.isParticipant(player.getUniqueId())) return;
+            if (!ps.isAlive()) {
+                player.getInventory().clear();
+                player.setFireTicks(0);
+                player.setFallDistance(0f);
+                player.setGameMode(GameMode.SPECTATOR);
+                return;
+            }
+            game.applyRespawnKit(player);
+        });
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -76,9 +86,20 @@ public final class CtfListener implements Listener {
             return;
         }
 
+        CtfPlayerState vState = game.getPlayerState(victim.getUniqueId());
+        if (vState == null || !vState.isAlive()) {
+            event.setCancelled(true);
+            return;
+        }
+
         Player attacker = resolveAttacker(event);
         if (attacker != null && game.isParticipant(attacker.getUniqueId())) {
             if (game.sameSide(victim.getUniqueId(), attacker.getUniqueId())) {
+                event.setCancelled(true);
+                return;
+            }
+            CtfPlayerState aState = game.getPlayerState(attacker.getUniqueId());
+            if (aState == null || !aState.isAlive()) {
                 event.setCancelled(true);
             }
         }
@@ -107,9 +128,9 @@ public final class CtfListener implements Listener {
             player.setFireTicks(0);
             CtfPlayerState ps = game.getPlayerState(player.getUniqueId());
             if (ps != null) {
-                Location spawn = game.getConfig().getSpawn(ps.getSide());
+                Location spawn = game.getParticipantRoundSpawn(player.getUniqueId());
                 if (spawn != null) {
-                    player.teleport(spawn);
+                    game.getPlugin().getTeleporter().teleport(player, spawn);
                 }
             }
         }
@@ -139,6 +160,11 @@ public final class CtfListener implements Listener {
             return;
         }
 
+        CtfPlayerState ps = game.getPlayerState(player.getUniqueId());
+        if (ps != null && !ps.isAlive()) {
+            return;
+        }
+
         if (game.getState() == CtfGame.State.RUNNING && game.getRoundPhase() == CtfGame.RoundPhase.ACTIVE) {
             game.tryDeliverFlag(player);
         }
@@ -149,6 +175,8 @@ public final class CtfListener implements Listener {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
         if (game.getState() != CtfGame.State.RUNNING) return;
+        CtfPlayerState ps = game.getPlayerState(player.getUniqueId());
+        if (ps == null || !ps.isAlive()) return;
         if (!event.getAction().isRightClick()) return;
 
         ItemStack offhand = player.getInventory().getItemInOffHand();
@@ -157,7 +185,9 @@ public final class CtfListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        game.tryPickupFlag(player);
+        if (game.getRoundPhase() == CtfGame.RoundPhase.ACTIVE) {
+            game.tryPickupFlag(player);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -165,7 +195,8 @@ public final class CtfListener implements Listener {
         Player player = event.getPlayer();
         if (!game.isParticipant(player.getUniqueId())) return;
         if (game.getState() != CtfGame.State.RUNNING) return;
-        if (!(event.getRightClicked() instanceof ArmorStand)) return;
+        if (game.getRoundPhase() != CtfGame.RoundPhase.ACTIVE) return;
+        if (!game.isFlagMarker(event.getRightClicked())) return;
 
         event.setCancelled(true);
         game.tryPickupFlag(player);

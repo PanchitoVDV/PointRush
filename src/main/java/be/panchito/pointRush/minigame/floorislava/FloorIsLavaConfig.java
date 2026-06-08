@@ -18,6 +18,8 @@ public final class FloorIsLavaConfig {
 
     public static final int DEFAULT_LAVA_RISE_SECONDS = 60;
     public static final int DEFAULT_ITEM_DROP_SECONDS = 30;
+    public static final double DEFAULT_KNOCK_HORIZONTAL = 0.8;
+    public static final double DEFAULT_KNOCK_VERTICAL = 0.35;
 
     private static final String KEY = "floorislava";
 
@@ -30,6 +32,8 @@ public final class FloorIsLavaConfig {
     private Double deathY;
     private int lavaRiseSeconds = DEFAULT_LAVA_RISE_SECONDS;
     private int itemDropSeconds = DEFAULT_ITEM_DROP_SECONDS;
+    private double knockHorizontal = DEFAULT_KNOCK_HORIZONTAL;
+    private double knockVertical = DEFAULT_KNOCK_VERTICAL;
 
     public FloorIsLavaConfig(JavaPlugin plugin, UnifiedSettings unified) {
         this.plugin = plugin;
@@ -43,6 +47,8 @@ public final class FloorIsLavaConfig {
         deathY = null;
         lavaRiseSeconds = DEFAULT_LAVA_RISE_SECONDS;
         itemDropSeconds = DEFAULT_ITEM_DROP_SECONDS;
+        knockHorizontal = DEFAULT_KNOCK_HORIZONTAL;
+        knockVertical = DEFAULT_KNOCK_VERTICAL;
 
         YamlConfiguration cfg = unified.yaml();
         if (cfg.getConfigurationSection(KEY) == null) {
@@ -63,6 +69,16 @@ public final class FloorIsLavaConfig {
         if (cfg.isSet(KEY + ".itemDropSeconds")) {
             this.itemDropSeconds = Math.max(10, cfg.getInt(KEY + ".itemDropSeconds"));
         }
+        if (cfg.isSet(KEY + ".knockHorizontal")) {
+            this.knockHorizontal = clampKnock(cfg.getDouble(KEY + ".knockHorizontal"));
+        }
+        if (cfg.isSet(KEY + ".knockVertical")) {
+            this.knockVertical = clampKnock(cfg.getDouble(KEY + ".knockVertical"));
+        }
+    }
+
+    private static double clampKnock(double v) {
+        return Math.max(0.0, Math.min(3.0, v));
     }
 
     public void save() {
@@ -74,13 +90,17 @@ public final class FloorIsLavaConfig {
         if (deathY != null) cfg.set(KEY + ".deathY", deathY);
         cfg.set(KEY + ".lavaRiseSeconds", lavaRiseSeconds);
         cfg.set(KEY + ".itemDropSeconds", itemDropSeconds);
+        cfg.set(KEY + ".knockHorizontal", knockHorizontal);
+        cfg.set(KEY + ".knockVertical", knockVertical);
         try {
             unified.save();
             plugin.getLogger().info("settings.yml opgeslagen (" + KEY + ": spawn=" + (spawn != null)
                     + ", region=" + (regionMin != null && regionMax != null)
                     + ", deathY=" + deathY
                     + ", lavaRiseSeconds=" + lavaRiseSeconds
-                    + ", itemDropSeconds=" + itemDropSeconds + ").");
+                    + ", itemDropSeconds=" + itemDropSeconds
+                    + ", knockH=" + knockHorizontal
+                    + ", knockV=" + knockVertical + ").");
         } catch (IOException ex) {
             plugin.getLogger().log(Level.SEVERE, "Kon settings.yml niet opslaan!", ex);
         }
@@ -183,6 +203,20 @@ public final class FloorIsLavaConfig {
 
     public void setItemDropSeconds(int seconds) {
         this.itemDropSeconds = Math.max(10, seconds);
+        save();
+    }
+
+    public double getKnockHorizontal() {
+        return knockHorizontal;
+    }
+
+    public double getKnockVertical() {
+        return knockVertical;
+    }
+
+    public void setKnock(double horizontal, double vertical) {
+        this.knockHorizontal = clampKnock(horizontal);
+        this.knockVertical = clampKnock(vertical);
         save();
     }
 

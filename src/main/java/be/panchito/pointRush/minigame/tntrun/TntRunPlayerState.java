@@ -2,23 +2,22 @@ package be.panchito.pointRush.minigame.tntrun;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.UUID;
 
 /**
  * Runtime state for a single participant in a TNT Run event.
  *
- * <p>Captures the pre-event snapshot (location, gamemode, inventory) for
- * restore on stop/quit and the live status: whether the player is still
- * alive, when they were eliminated, and their final placement.
+ * <p>Captures the pre-event snapshot (location, gamemode) for restore on
+ * stop/quit and the live status: whether the player is still alive, when
+ * they were eliminated, and their final placement. Inventories are managed
+ * per world by Multiverse-Inventories.
  */
 public final class TntRunPlayerState {
 
     private final UUID uuid;
     private final Location savedLocation;
     private final GameMode savedGameMode;
-    private final ItemStack[] savedInventory;
 
     private boolean alive = true;
     /** Wall-clock ms when the player got eliminated (0 = still alive). */
@@ -31,11 +30,10 @@ public final class TntRunPlayerState {
     private boolean shopRunResist;
 
     public TntRunPlayerState(UUID uuid, Location savedLocation,
-                             GameMode savedGameMode, ItemStack[] savedInventory) {
+                             GameMode savedGameMode) {
         this.uuid = uuid;
         this.savedLocation = savedLocation;
         this.savedGameMode = savedGameMode;
-        this.savedInventory = savedInventory;
     }
 
     public UUID getUuid() {
@@ -48,10 +46,6 @@ public final class TntRunPlayerState {
 
     public GameMode getSavedGameMode() {
         return savedGameMode;
-    }
-
-    public ItemStack[] getSavedInventory() {
-        return savedInventory;
     }
 
     public boolean isAlive() {
