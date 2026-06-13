@@ -4,6 +4,7 @@ import be.panchito.pointRush.config.UnifiedSettings;
 import be.panchito.pointRush.history.EventHistoryEntry;
 import be.panchito.pointRush.history.EventHistoryManager;
 import be.panchito.pointRush.storage.mongo.MongoEventRepository;
+import be.panchito.pointRush.storage.mongo.MongoLiveEventRepository;
 import be.panchito.pointRush.storage.mongo.MongoLiveStreamRepository;
 import be.panchito.pointRush.storage.mongo.MongoPlayerCoinRepository;
 import be.panchito.pointRush.storage.mongo.MongoScheduledEventRepository;
@@ -44,6 +45,7 @@ public final class DataManager {
     private MongoEventRepository eventRepo;
     private MongoLiveStreamRepository liveStreamRepo;
     private MongoScheduledEventRepository scheduledEventRepo;
+    private MongoLiveEventRepository liveEventRepo;
 
     private final Object flushLock = new Object();
     private volatile BukkitTask pendingFlush;
@@ -66,6 +68,7 @@ public final class DataManager {
         String eventsCollection = yaml.getString("mongodb.events-collection", "events");
         String liveStreams = yaml.getString("mongodb.live-streams-collection", "live_streams");
         String scheduleCollection = yaml.getString("mongodb.schedule-collection", "event_schedule");
+        String liveEventCollection = yaml.getString("mongodb.live-event-collection", "live_event");
 
         try {
             mongoClient = MongoClients.create(uri);
@@ -74,6 +77,7 @@ public final class DataManager {
             eventRepo = new MongoEventRepository(mongoClient, database, eventsCollection);
             liveStreamRepo = new MongoLiveStreamRepository(mongoClient, database, liveStreams);
             scheduledEventRepo = new MongoScheduledEventRepository(mongoClient, database, scheduleCollection);
+            liveEventRepo = new MongoLiveEventRepository(mongoClient, database, liveEventCollection);
 
             teamManager.clear();
             List<Team> fromMongo = teamRepo.loadAll(plugin.getLogger());
@@ -83,7 +87,7 @@ public final class DataManager {
                     for (Team t : legacyTeams) {
                         teamManager.registerTeam(t);
                     }
-                    teamRepo.syncAll(new ArrayList<>(teamManager.getTeams()));
+                    teamRepo.upsertAllMetadata(new ArrayList<>(teamManager.getTeams()));
                     plugin.getLogger().warning("MongoDB-collectie was leeg: teams.yml eenmalig geïmporteerd ("
                             + legacyTeams.size() + " teams). Verwijder of hernoem teams.yml na controle.");
                 }
@@ -191,6 +195,7 @@ public final class DataManager {
             eventRepo = null;
             liveStreamRepo = null;
             scheduledEventRepo = null;
+            liveEventRepo = null;
         }
     }
 
@@ -200,6 +205,10 @@ public final class DataManager {
 
     public MongoScheduledEventRepository getScheduledEventRepository() {
         return scheduledEventRepo;
+    }
+
+    public MongoLiveEventRepository getLiveEventRepository() {
+        return liveEventRepo;
     }
 
     /** Mongo-profiel voor verzamelde Nexo collectible coins ({@code null} als verbinding geforceerd sloot). */
@@ -218,6 +227,21 @@ public final class DataManager {
                 repo.upsert(entry);
             } catch (Exception ex) {
                 plugin.getLogger().log(Level.WARNING, "Kon event niet naar MongoDB schrijven: " + entry.id(), ex);
+            }
+        });
+    }
+
+    /** Verwijdert een afgerond event uit MongoDB (async, voor de stats website). */
+    public void deleteEventHistoryEntry(String id) {
+        MongoEventRepository repo = eventRepo;
+        if (repo == null || id == null) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                repo.delete(id);
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.WARNING, "Kon event niet uit MongoDB verwijderen: " + id, ex);
             }
         });
     }
@@ -276,11 +300,93 @@ public final class DataManager {
         }
         synchronized (flushLock) {
             try {
-                repo.syncAll(new ArrayList<>(teamManager.getTeams()));
+                repo.upsertAllMetadata(new ArrayList<>(teamManager.getTeams()));
             } catch (Exception ex) {
                 plugin.getLogger().log(Level.SEVERE, "Kon teams niet naar MongoDB schrijven.", ex);
             }
         }
+    }
+
+    /**
+     * Kent atomair teampunten toe ({@code $inc}). Commutatief en dus veilig wanneer meerdere servers
+     * tegen dezelfde database schrijven: gelijktijdige toekenningen kunnen elkaar nooit overschrijven.
+     * Werkt het in-memory team direct bij (voor live weergave) en schrijft async naar MongoDB.
+     */
+    public void addTeamPoints(Team team, long delta) {
+        if (team == null || delta == 0L) {
+            return;
+        }
+        team.addPoints(delta);
+        leaderboardCache.invalidate();
+        MongoTeamRepository repo = teamRepo;
+        if (repo == null) {
+            return;
+        }
+        runStorageTask(() -> repo.incrementPoints(team, delta),
+                "Kon teampunten niet bijwerken: " + team.getName());
+    }
+
+    /**
+     * Trekt teampunten af (in-memory geklemd op {@code >= 0}) en schrijft de nieuwe absolute waarde weg.
+     * Voor admin-acties — bewust autoritair (last-writer-wins), in tegenstelling tot {@link #addTeamPoints}.
+     */
+    public void removeTeamPoints(Team team, long amount) {
+        if (team == null || amount == 0L) {
+            return;
+        }
+        team.removePoints(amount);
+        persistAbsolutePoints(team);
+    }
+
+    /**
+     * Zet teampunten op een vaste waarde (admin set/reset). Schrijft de absolute waarde atomair weg.
+     */
+    public void setTeamPoints(Team team, long value) {
+        if (team == null) {
+            return;
+        }
+        team.setPoints(value);
+        persistAbsolutePoints(team);
+    }
+
+    private void persistAbsolutePoints(Team team) {
+        leaderboardCache.invalidate();
+        MongoTeamRepository repo = teamRepo;
+        if (repo == null) {
+            return;
+        }
+        long value = team.getPoints();
+        runStorageTask(() -> repo.setPoints(team, value),
+                "Kon teampunten niet bijwerken: " + team.getName());
+    }
+
+    /** Verwijdert een team uit MongoDB (expliciet bij disband; routine-saves verwijderen nooit). */
+    public void deleteTeam(UUID teamId) {
+        MongoTeamRepository repo = teamRepo;
+        if (repo == null || teamId == null) {
+            return;
+        }
+        runStorageTask(() -> repo.deleteTeam(teamId), "Kon team niet verwijderen: " + teamId);
+    }
+
+    /** Voert een MongoDB-schrijfactie async uit; logt bij falen met {@code errorMessage}. */
+    private void runStorageTask(Runnable task, String errorMessage) {
+        if (!plugin.isEnabled()) {
+            // Tijdens shutdown kunnen geen async tasks meer; schrijf synchroon zodat data niet verloren gaat.
+            try {
+                task.run();
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.WARNING, errorMessage, ex);
+            }
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                task.run();
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.WARNING, errorMessage, ex);
+            }
+        });
     }
 
     /**
@@ -296,7 +402,16 @@ public final class DataManager {
         for (Team team : new ArrayList<>(teamManager.getTeams())) {
             teamManager.disbandTeam(team);
         }
-        flushSync();
+        // Routine-saves verwijderen niets meer; wis de team-collectie hier expliciet.
+        MongoTeamRepository teams = teamRepo;
+        if (teams != null) {
+            try {
+                teams.deleteAll();
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.SEVERE, "Kon teams niet wissen in MongoDB.", ex);
+                throw new IllegalStateException("Kon teams niet wissen", ex);
+            }
+        }
 
         long coinProfilesRemoved = 0L;
         MongoPlayerCoinRepository coins = playerCoinRepo;

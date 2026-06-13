@@ -15,8 +15,15 @@ import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -53,12 +60,18 @@ public final class GoldRushGame {
 
     private BukkitTask tickTask;
 
+    /** Tag op de uitgedeelde houwelen zodat we ze aan het einde weer kunnen verwijderen. */
+    private final NamespacedKey pickaxeKey;
+    private final GoldRushScoreboard scoreboard;
+
     public GoldRushGame(PointRush plugin, GoldRushConfig config) {
         this.plugin = plugin;
         this.config = config;
         this.teamManager = plugin.getTeamManager();
         this.dataManager = plugin.getDataManager();
         this.historyManager = plugin.getEventHistoryManager();
+        this.pickaxeKey = new NamespacedKey(plugin, "goldrush_pickaxe");
+        this.scoreboard = new GoldRushScoreboard(plugin, this);
     }
 
     public State getState() {
@@ -79,6 +92,11 @@ public final class GoldRushGame {
 
     public int getScore(UUID playerId) {
         return scores.getOrDefault(playerId, 0);
+    }
+
+    /** Naam voor de leaderboard; valt terug op een korte UUID als de speler nog niet scoorde. */
+    public String nameOf(UUID id) {
+        return names.getOrDefault(id, id.toString().substring(0, 8));
     }
 
     public long getRunTimeLeftMs() {
@@ -103,9 +121,12 @@ public final class GoldRushGame {
                         + config.getDurationMinutes() + " min"), NamedTextColor.GRAY),
                 Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(2200), Duration.ofMillis(400))
         );
+        scoreboard.start();
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.showTitle(title);
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.4f);
+            equipEventPickaxe(player);
+            scoreboard.attach(player);
         }
 
         Bukkit.broadcast(Messages.PREFIX.append(Component.text()
@@ -131,6 +152,8 @@ public final class GoldRushGame {
         List<UUID> winnerIds = findWinnerIds();
         announceWinners(winnerIds, forced);
         recordHistory(winnerIds);
+        removeEventPickaxes();
+        scoreboard.stop();
 
         state = State.IDLE;
         cancelTask(tickTask);
@@ -212,8 +235,7 @@ public final class GoldRushGame {
             int pts = scores.getOrDefault(winnerId, 0);
             Team team = teamManager.getTeamOfPlayer(winnerId);
             if (team != null) {
-                team.addPoints(WIN_BONUS_POINTS);
-                dataManager.save();
+                dataManager.addTeamPoints(team, WIN_BONUS_POINTS);
             }
             var builder = Component.text()
                     .append(Component.text(name, NamedTextColor.GOLD, TextDecoration.BOLD))
@@ -256,11 +278,8 @@ public final class GoldRushGame {
         for (UUID winnerId : winnerIds) {
             Team team = teamManager.getTeamOfPlayer(winnerId);
             if (team != null && rewardedTeams.add(team.getId())) {
-                team.addPoints(WIN_BONUS_POINTS);
+                dataManager.addTeamPoints(team, WIN_BONUS_POINTS);
             }
-        }
-        if (!rewardedTeams.isEmpty()) {
-            dataManager.save();
         }
     }
 
@@ -331,6 +350,73 @@ public final class GoldRushGame {
                 System.currentTimeMillis(),
                 placements
         ));
+    }
+
+    /**
+     * Geeft de speler een max houweel (Netherite · álle enchants op max level · onbreekbaar) tijdens
+     * een lopend event. Slaat creative/spectator over en geeft niet dubbel. Veilig om bij join aan te
+     * roepen.
+     */
+    /** Bij join tijdens een lopend event: max houweel geven én het sidebar-scoreboard tonen. */
+    public void onParticipantJoin(Player player) {
+        if (state != State.RUNNING) return;
+        equipEventPickaxe(player);
+        scoreboard.attach(player);
+    }
+
+    public void equipEventPickaxe(Player player) {
+        if (state != State.RUNNING) return;
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+        if (hasEventPickaxe(player)) return;
+        player.getInventory().addItem(createEventPickaxe());
+    }
+
+    private ItemStack createEventPickaxe() {
+        ItemStack pickaxe = new ItemStack(Material.NETHERITE_PICKAXE);
+        pickaxe.editMeta(meta -> {
+            meta.displayName(Component.text(SmallText.of("Gold Rush Houweel"),
+                    NamedTextColor.GOLD, TextDecoration.BOLD));
+            // Alle bestaande enchantments op hun max level (geforceerd, ook conflicterende). Curses
+            // (vanishing/binding) slaan we over zodat de houweel niet verdwijnt bij dood; Silk Touch
+            // ook, zodat goud-erts gewoon ruw goud dropt (Fortune blijft werken).
+            for (Enchantment enchantment : Registry.ENCHANTMENT) {
+                String key = enchantment.getKey().getKey();
+                if (key.contains("curse") || key.equals("silk_touch")) {
+                    continue;
+                }
+                meta.addEnchant(enchantment, enchantment.getMaxLevel(), true);
+            }
+            meta.setUnbreakable(true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
+            meta.getPersistentDataContainer().set(pickaxeKey, PersistentDataType.BYTE, (byte) 1);
+        });
+        return pickaxe;
+    }
+
+    private boolean hasEventPickaxe(Player player) {
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (isEventPickaxe(item)) return true;
+        }
+        return false;
+    }
+
+    private boolean isEventPickaxe(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(pickaxeKey, PersistentDataType.BYTE);
+    }
+
+    /** Verwijdert de uitgedeelde houwelen weer bij alle online spelers (einde event). */
+    private void removeEventPickaxes() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            ItemStack[] contents = player.getInventory().getContents();
+            for (int i = 0; i < contents.length; i++) {
+                if (isEventPickaxe(contents[i])) {
+                    player.getInventory().setItem(i, null);
+                }
+            }
+        }
     }
 
     public String formatTime(long ms) {

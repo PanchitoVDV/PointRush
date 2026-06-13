@@ -244,13 +244,23 @@ public final class TntRunGame {
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        Location spawn = config.getSpawn();
-        if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
-        }
-        MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_RUN);
         scoreboard.attach(player);
         player.sendMessage(Messages.info("TNT Run start binnenkort - maak je klaar!"));
+
+        Location spawn = config.getSpawn();
+        if (spawn != null) {
+            // Items pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) ze meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    player.getInventory().clear();
+                    MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_RUN);
+                }
+            });
+        } else {
+            player.getInventory().clear();
+            MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_RUN);
+        }
     }
 
     private void startCountdown() {
@@ -397,8 +407,7 @@ public final class TntRunGame {
         int pts = pointsForPlacement(ps.getPlacement());
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null && pts > 0) {
-            team.addPoints(pts);
-            dataManager.save();
+            dataManager.addTeamPoints(team, pts);
         }
 
         player.setGameMode(GameMode.SPECTATOR);
@@ -466,11 +475,8 @@ public final class TntRunGame {
             int pts = pointsForPlacement(1);
             Team team = teamManager.getTeamOfPlayer(id);
             if (team != null && pts > 0) {
-                team.addPoints(pts);
+                dataManager.addTeamPoints(team, pts);
             }
-        }
-        if (!alive.isEmpty()) {
-            dataManager.save();
         }
 
         announceWinner(alive);

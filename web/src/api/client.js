@@ -20,6 +20,7 @@ export const api = {
   players: (limit = 50) => fetchJson(`/players?limit=${limit}`),
   player: (uuid) => fetchJson(`/players/${uuid}`),
   live: () => fetchJson('/live'),
+  liveEvent: () => fetchJson('/live-event'),
   meta: () => fetchJson('/meta'),
   schedule: () => fetchJson('/schedule'),
   scheduleCalendar: (limit = 120) => fetchJson(`/schedule/calendar?limit=${limit}`),

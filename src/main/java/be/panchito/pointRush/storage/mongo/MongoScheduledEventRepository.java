@@ -26,20 +26,25 @@ public final class MongoScheduledEventRepository {
     public EventScheduleState loadOrDefault(List<String> defaultPool) {
         Document doc = schedule.find(Filters.eq("_id", DOC_ID)).first();
         if (doc == null) {
-            return new EventScheduleState(defaultPool, null, SpinState.idle());
+            return new EventScheduleState(defaultPool, List.of(), null, SpinState.idle());
         }
         List<String> pool = doc.getList("pool", String.class);
         if (pool == null || pool.isEmpty()) {
             pool = new ArrayList<>(defaultPool);
         }
+        List<String> disabled = doc.getList("disabled", String.class);
+        if (disabled == null) {
+            disabled = List.of();
+        }
         UpcomingEvent upcoming = parseUpcoming(doc.get("upcoming", Document.class));
         SpinState spin = parseSpin(doc.get("spin", Document.class));
-        return new EventScheduleState(pool, upcoming, spin);
+        return new EventScheduleState(pool, disabled, upcoming, spin);
     }
 
     public void save(EventScheduleState state) {
         Document doc = new Document("_id", DOC_ID)
-                .append("pool", new ArrayList<>(state.pool()));
+                .append("pool", new ArrayList<>(state.pool()))
+                .append("disabled", new ArrayList<>(state.disabled()));
         if (state.upcoming() != null) {
             UpcomingEvent u = state.upcoming();
             doc.append("upcoming", new Document()

@@ -148,6 +148,9 @@ public final class BoatRaceCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "boatrace")) {
+            return;
+        }
         if (game.getState() != BoatRaceGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een bootrace event."));
             return;

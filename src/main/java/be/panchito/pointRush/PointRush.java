@@ -8,6 +8,8 @@ import be.panchito.pointRush.profile.PlayerProfileService;
 import be.panchito.pointRush.commands.LiveCommand;
 import be.panchito.pointRush.commands.RandomEventCommand;
 import be.panchito.pointRush.commands.PointRushCommand;
+import be.panchito.pointRush.commands.AdminEventMenu;
+import be.panchito.pointRush.commands.AdminEventMenuListener;
 import be.panchito.pointRush.commands.PointsCommand;
 import be.panchito.pointRush.commands.CoinCommand;
 import be.panchito.pointRush.commands.ShopCommand;
@@ -90,6 +92,10 @@ import be.panchito.pointRush.scoreboard.LobbyScoreboard;
 import be.panchito.pointRush.scoreboard.LobbyScoreboardListener;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.LeaderboardCache;
+import be.panchito.pointRush.network.CrossServerEventListener;
+import be.panchito.pointRush.network.CrossServerEventService;
+import be.panchito.pointRush.network.NetworkSettings;
+import be.panchito.pointRush.network.ProxyTransport;
 import be.panchito.pointRush.team.TeamManager;
 import be.panchito.pointRush.world.DimensionPortalListener;
 import be.panchito.pointRush.world.WorldAccessSettings;
@@ -113,6 +119,9 @@ public final class PointRush extends JavaPlugin {
     private TeamManager teamManager;
     private DataManager dataManager;
     private EventHistoryManager eventHistoryManager;
+    private NetworkSettings networkSettings;
+    private ProxyTransport proxyTransport;
+    private CrossServerEventService crossServerEventService;
 
     private ParkourConfig parkourConfig;
     private ParkourGame parkourGame;
@@ -210,6 +219,21 @@ public final class PointRush extends JavaPlugin {
         this.dbExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
         this.teleporter = new be.panchito.pointRush.util.MinigameTeleporter(this);
 
+        this.networkSettings = new NetworkSettings(unifiedSettings);
+        networkSettings.load();
+        this.proxyTransport = new ProxyTransport(this, networkSettings);
+        proxyTransport.register();
+        this.crossServerEventService = new CrossServerEventService(
+                this, networkSettings, proxyTransport, dataManager.getLiveEventRepository());
+        crossServerEventService.start();
+        getServer().getPluginManager().registerEvents(
+                new CrossServerEventListener(crossServerEventService), this);
+        if (networkSettings.isEnabled()) {
+            getLogger().info("PointRush netwerk-modus actief: rol=" + networkSettings.getRole()
+                    + ", events-server=" + networkSettings.getEventsServer()
+                    + ", survival-server=" + networkSettings.getSurvivalServer() + ".");
+        }
+
         this.playerProfileService = new PlayerProfileService(this);
         this.minigameTransitionService = new MinigameTransitionService(this);
         minigameTransitionService.init();
@@ -218,7 +242,10 @@ public final class PointRush extends JavaPlugin {
 
         registerCommand("team", new TeamCommand(this, teamManager, dataManager));
         registerCommand("points", new PointsCommand(teamManager, dataManager));
-        registerCommand("pointrush", new PointRushCommand(eventHistoryManager, teamManager, dataManager));
+        AdminEventMenu adminEventMenu = new AdminEventMenu(eventHistoryManager, teamManager, dataManager);
+        registerCommand("pointrush",
+                new PointRushCommand(eventHistoryManager, teamManager, dataManager, adminEventMenu));
+        getServer().getPluginManager().registerEvents(new AdminEventMenuListener(adminEventMenu), this);
         registerCommand("prwebsite", new ProfileWebsiteCommand(playerProfileService));
 
         registerCommand("dimension", new DimensionCommand(worldAccessSettings));
@@ -337,7 +364,7 @@ public final class PointRush extends JavaPlugin {
                 coinSpawnConfig.getResolvedPoolIds());
         this.coinTotalCache = new CoinTotalCache(this, dbExecutor);
         this.coinTotalCache.start();
-        this.nexoCoinSpawner = new NexoCoinSpawner(this, coinSpawnConfig, () -> MinigameRegistry.anyActive(this));
+        this.nexoCoinSpawner = new NexoCoinSpawner(this, coinSpawnConfig, this::isEventLiveNow);
         getServer().getPluginManager().registerEvents(nexoCoinSpawner, this);
         getServer().getPluginManager().registerEvents(
                 new CoinPickupListener(this, coinSpawnConfig, coinTotalCache, nexoCoinSpawner), this);
@@ -377,6 +404,12 @@ public final class PointRush extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (crossServerEventService != null) {
+            crossServerEventService.shutdown();
+        }
+        if (proxyTransport != null) {
+            proxyTransport.unregister();
+        }
         if (minigameHudService != null) {
             minigameHudService.shutdown();
         }
@@ -481,6 +514,30 @@ public final class PointRush extends JavaPlugin {
 
     public DataManager getDataManager() {
         return dataManager;
+    }
+
+    public NetworkSettings getNetworkSettings() {
+        return networkSettings;
+    }
+
+    public ProxyTransport getProxyTransport() {
+        return proxyTransport;
+    }
+
+    public CrossServerEventService getCrossServerEventService() {
+        return crossServerEventService;
+    }
+
+    /**
+     * True wanneer er een event loopt — lokaal op deze server óf elders in het netwerk (gedeeld
+     * live_event doc). Gebruik dit i.p.v. {@code MinigameRegistry.anyActive} voor cross-server-bewuste
+     * checks zoals het blokkeren van team-acties tijdens events.
+     */
+    public boolean isEventLiveNow() {
+        if (MinigameRegistry.anyActive(this)) {
+            return true;
+        }
+        return crossServerEventService != null && crossServerEventService.isRemoteLive();
     }
 
     public EventHistoryManager getEventHistoryManager() {

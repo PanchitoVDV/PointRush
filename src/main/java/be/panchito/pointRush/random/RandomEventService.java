@@ -42,7 +42,7 @@ public final class RandomEventService {
     public RandomEventService(PointRush plugin, MongoScheduledEventRepository scheduleRepo) {
         this.plugin = plugin;
         this.scheduleRepo = scheduleRepo;
-        this.scheduleState = new EventScheduleState(defaultPoolIds(), null, SpinState.idle());
+        this.scheduleState = new EventScheduleState(defaultPoolIds(), List.of(), null, SpinState.idle());
     }
 
     public void loadSchedule() {
@@ -166,17 +166,24 @@ public final class RandomEventService {
             initiator.sendMessage(Messages.error("Onbekend event: " + scheduled.eventId()));
             return false;
         }
-        if (!candidate.ready()) {
-            initiator.sendMessage(Messages.error(scheduled.displayName()
-                    + " is niet klaar om te starten (arena ok? geen andere game actief?)."));
-            return false;
-        }
 
-        boolean started = candidate.start();
-        if (!started) {
-            initiator.sendMessage(Messages.error(scheduled.displayName()
-                    + " kon niet starten (genoeg spelers? arena ok?)."));
-            return false;
+        if (plugin.getNetworkSettings().isSurvivalHost()) {
+            // Arena's draaien op de events-server; deze server stuurt de deelnemers door en start daar.
+            if (!plugin.getCrossServerEventService().requestStart(scheduled.eventId())) {
+                initiator.sendMessage(Messages.error("Kon cross-server event niet aanvragen."));
+                return false;
+            }
+        } else {
+            if (!candidate.ready()) {
+                initiator.sendMessage(Messages.error(scheduled.displayName()
+                        + " is niet klaar om te starten (arena ok? geen andere game actief?)."));
+                return false;
+            }
+            if (!candidate.start()) {
+                initiator.sendMessage(Messages.error(scheduled.displayName()
+                        + " kon niet starten (genoeg spelers? arena ok?)."));
+                return false;
+            }
         }
 
         scheduleState.removeFromPool(scheduled.eventId());
@@ -211,7 +218,12 @@ public final class RandomEventService {
         sequence[extraSpins] = winner;
         sequenceIds.add(winner.id());
 
-        List<String> candidateIds = new ArrayList<>(scheduleState.pool());
+        List<String> candidateIds = new ArrayList<>();
+        for (String id : scheduleState.pool()) {
+            if (!scheduleState.isDisabled(id)) {
+                candidateIds.add(id);
+            }
+        }
         List<String> candidateNames = new ArrayList<>(candidateIds.size());
         for (String id : candidateIds) {
             candidateNames.add(MinigameRegistry.displayName(id));
@@ -326,11 +338,34 @@ public final class RandomEventService {
     private List<MinigameRegistry.RandomCandidate> candidatesInPool() {
         List<MinigameRegistry.RandomCandidate> out = new ArrayList<>();
         for (MinigameRegistry.RandomCandidate c : MinigameRegistry.randomCandidates(plugin)) {
-            if (scheduleState.pool().contains(c.id()) && c.ready()) {
+            if (scheduleState.pool().contains(c.id()) && !scheduleState.isDisabled(c.id()) && c.ready()) {
                 out.add(c);
             }
         }
         return out;
+    }
+
+    /**
+     * Zet een event tijdelijk uit of weer aan voor het rad (persistent in MongoDB).
+     * Returnt false als de status al zo stond.
+     */
+    public boolean setEventDisabled(String eventId, boolean disabled) {
+        boolean changed = disabled
+                ? scheduleState.disable(eventId)
+                : scheduleState.enable(eventId);
+        if (changed) {
+            persistScheduleAsync();
+        }
+        return changed;
+    }
+
+    public boolean isEventDisabled(String eventId) {
+        return scheduleState.isDisabled(eventId);
+    }
+
+    /** Event-id's die momenteel uit het rad zijn gehaald. */
+    public List<String> disabledEventIds() {
+        return scheduleState.disabled();
     }
 
     private void refillPoolIfEmpty() {
@@ -388,7 +423,7 @@ public final class RandomEventService {
     }
 
     private boolean isAnyMinigameActive() {
-        return MinigameRegistry.anyActive(plugin) || spinning;
+        return plugin.isEventLiveNow() || spinning;
     }
 
     private void broadcastTitle(Component title, Component subtitle) {

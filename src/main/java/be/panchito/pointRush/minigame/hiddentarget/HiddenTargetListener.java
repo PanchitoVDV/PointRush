@@ -60,7 +60,7 @@ public final class HiddenTargetListener implements Listener {
 
         HiddenTargetPlayerState ps = game.getPlayerState(player.getUniqueId());
         if (ps != null && !ps.isAlive()) {
-            Location respawn = game.getConfig().getSpawn();
+            Location respawn = game.getConfig().randomSpawn();
             if (respawn == null) {
                 respawn = ps.getSavedLocation();
             }
@@ -136,9 +136,19 @@ public final class HiddenTargetListener implements Listener {
             event.setCancelled(true);
             player.setFallDistance(0f);
             player.setFireTicks(0);
-            if (game.getConfig().getSpawn() != null) {
-                game.getPlugin().getTeleporter().teleport(player, game.getConfig().getSpawn());
+            Location voidSpawn = game.getConfig().randomSpawn();
+            if (voidSpawn != null) {
+                game.getPlugin().getTeleporter().teleport(player, voidSpawn);
             }
+            return;
+        }
+
+        // Outside the active hunt (positioning countdown / end celebration) participants
+        // are invulnerable — an environmental death there can't be processed by handleDeath
+        // and would strand the player at a vanilla respawn.
+        if (game.getState() != HiddenTargetGame.State.RUNNING) {
+            event.setCancelled(true);
+            player.setFireTicks(0);
         }
     }
 
@@ -148,7 +158,8 @@ public final class HiddenTargetListener implements Listener {
         if (!game.isParticipant(player.getUniqueId())) return;
         if (event.getTo() == null) return;
 
-        if (game.getState() == HiddenTargetGame.State.STARTING) {
+        // Fully freeze players during the end-of-event celebration.
+        if (game.getState() == HiddenTargetGame.State.ENDING) {
             if (event.getFrom().getX() != event.getTo().getX()
                     || event.getFrom().getY() != event.getTo().getY()
                     || event.getFrom().getZ() != event.getTo().getZ()) {
@@ -157,9 +168,17 @@ public final class HiddenTargetListener implements Listener {
             return;
         }
 
-        if (game.getState() == HiddenTargetGame.State.RUNNING) {
+        // During positioning (STARTING) and the hunt (RUNNING) players move freely,
+        // but stay confined to the arena region when one is configured. Only block the
+        // move when crossing from INSIDE to OUTSIDE — never trap a player who started
+        // outside (e.g. a spawn placed outside the region, or the brief async-teleport
+        // window where they're still in the lobby world), which would freeze them solid.
+        if (game.getState() == HiddenTargetGame.State.STARTING
+                || game.getState() == HiddenTargetGame.State.RUNNING) {
             HiddenTargetPlayerState ps = game.getPlayerState(player.getUniqueId());
-            if (ps != null && ps.isAlive() && !game.getConfig().contains(event.getTo())) {
+            if (ps != null && ps.isAlive()
+                    && game.getConfig().contains(event.getFrom())
+                    && !game.getConfig().contains(event.getTo())) {
                 event.setTo(event.getFrom().clone());
                 player.sendActionBar(Component.text(SmallText.of("buiten de arena!"), NamedTextColor.RED));
             }

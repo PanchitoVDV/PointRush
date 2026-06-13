@@ -29,7 +29,7 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "start", "stop", "info", "setspawn", "addcheckpoint", "setfinish",
-            "clearcheckpoints", "reload", "leave", "help"
+            "clearcheckpoints", "settime", "reload", "leave", "help"
     );
 
     private final ParkourGame game;
@@ -65,6 +65,7 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
             case "addcheckpoint" -> handleAddCheckpoint(sender);
             case "setfinish" -> handleSetFinish(sender);
             case "clearcheckpoints" -> handleClearCheckpoints(sender);
+            case "settime" -> handleSetTime(sender, args);
             case "reload" -> handleReload(sender);
             default -> sendHelp(sender);
         }
@@ -82,6 +83,7 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(line("/parkour addcheckpoint", "Voeg checkpoint toe op je locatie"));
             sender.sendMessage(line("/parkour setfinish", "Zet de finish op je locatie"));
             sender.sendMessage(line("/parkour clearcheckpoints", "Wis alle checkpoints"));
+            sender.sendMessage(line("/parkour settime <min>", "Tijdslimiet in minuten (default 10)"));
             sender.sendMessage(line("/parkour start", "Start het event"));
             sender.sendMessage(line("/parkour stop", "Stop het event"));
             sender.sendMessage(line("/parkour reload", "Herlaad parkour.yml"));
@@ -103,6 +105,7 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.info("Spawn: " + locText(config.getSpawn())));
         sender.sendMessage(Messages.info("Finish: " + locText(config.getFinish())));
         sender.sendMessage(Messages.info("Checkpoints: " + config.getCheckpoints().size()));
+        sender.sendMessage(Messages.info("Tijdslimiet: " + config.getDurationMinutes() + " min"));
     }
 
     private String locText(Location loc) {
@@ -112,6 +115,9 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "parkour")) {
+            return;
+        }
         if (game.getState() != ParkourGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een parkour event."));
             return;
@@ -170,6 +176,31 @@ public final class ParkourCommand implements CommandExecutor, TabCompleter {
     private void handleClearCheckpoints(CommandSender sender) {
         config.clearCheckpoints();
         sender.sendMessage(Messages.success("Alle checkpoints gewist en opgeslagen."));
+    }
+
+    private void handleSetTime(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Messages.error("Gebruik: /parkour settime <minuten>"));
+            return;
+        }
+        int min = parseInt(args[1], sender);
+        if (min < 0) return;
+        if (min < ParkourConfig.MIN_DURATION_MINUTES || min > ParkourConfig.MAX_DURATION_MINUTES) {
+            sender.sendMessage(Messages.error("Waarde moet tussen " + ParkourConfig.MIN_DURATION_MINUTES
+                    + " en " + ParkourConfig.MAX_DURATION_MINUTES + " minuten zijn."));
+            return;
+        }
+        config.setDurationMinutes(min);
+        sender.sendMessage(Messages.success("Tijdslimiet parkour: " + min + " minuten."));
+    }
+
+    private int parseInt(String raw, CommandSender sender) {
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(Messages.error("Ongeldig getal."));
+            return -1;
+        }
     }
 
     private void handleReload(CommandSender sender) {

@@ -140,7 +140,12 @@ public final class ParkourScoreboard {
 
     private void tick() {
         List<ParkourPlayerState> ranked = computeLeaderboard();
-        String timeStr = formatTime(System.currentTimeMillis() - raceStartMs);
+        long durationMs = game.getConfig().getDurationMs();
+        // Tijdens de countdown staat de volledige tijd; eenmaal gestart telt 'm af naar 0.
+        long remainingMs = game.getState() == ParkourGame.State.RUNNING
+                ? durationMs - (System.currentTimeMillis() - raceStartMs)
+                : durationMs;
+        String timeStr = formatTime(remainingMs);
         int totalCps = game.getConfig().getCheckpoints().size();
 
         for (Map.Entry<UUID, Scoreboard> e : boards.entrySet()) {

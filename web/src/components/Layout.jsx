@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import LiveEventBanner from './LiveEventBanner';
 
 const links = [
   { to: '/', label: 'Home' },
@@ -46,6 +47,8 @@ export default function Layout({ demo }) {
           </nav>
         </div>
       </header>
+
+      <LiveEventBanner />
 
       {demo && (
         <div className="demo-banner">

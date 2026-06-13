@@ -23,6 +23,7 @@ public final class MinigameText {
             case "IDLE" -> "inactief";
             case "STARTING" -> "countdown";
             case "RUNNING" -> "bezig";
+            case "ENDING" -> "afsluiten";
             case "INTERMISSION" -> "pauze";
             default -> state.name().toLowerCase(Locale.ROOT);
         };

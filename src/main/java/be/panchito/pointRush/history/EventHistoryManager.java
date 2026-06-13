@@ -190,6 +190,20 @@ public final class EventHistoryManager {
         return id == null ? null : entries.get(id);
     }
 
+    /**
+     * Verwijdert één event uit het geheugen en van schijf ({@code events.yml}).
+     *
+     * @return de verwijderde entry, of {@code null} als er geen event met die id bestond.
+     */
+    public EventHistoryEntry remove(String id) {
+        if (id == null) return null;
+        EventHistoryEntry removed = entries.remove(id);
+        if (removed != null) {
+            save();
+        }
+        return removed;
+    }
+
     /** Wist alle entries in geheugen en op schijf ({@code events.yml}). */
     public int clearAll() {
         int count = entries.size();

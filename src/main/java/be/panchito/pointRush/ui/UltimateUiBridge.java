@@ -46,6 +46,12 @@ public final class UltimateUiBridge {
     private Method closeGuiMethod;
     private Method isGuiOpenMethod;
     private boolean missingWarningLogged;
+    /**
+     * True zodra een volledige resolve-poging mislukte. Voorkomt dat de dure plugin-JAR-scan
+     * ({@code scanAllPluginsForApiInJars}) bij elke HUD-tick opnieuw draait. Wordt gereset door
+     * {@link #init()} (startup-retries) en de PluginEnableEvent voor Ultimate UI.
+     */
+    private boolean resolutionExhausted;
 
     public UltimateUiBridge(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -67,7 +73,13 @@ public final class UltimateUiBridge {
         closeGuiMethod = null;
         isGuiOpenMethod = null;
         missingWarningLogged = false;
+        resolutionExhausted = false;
         resolveApi();
+    }
+
+    /** True als een resolve-poging definitief mislukte (HUD/transition blijven dan goedkoop no-op). */
+    public boolean isResolutionExhausted() {
+        return resolutionExhausted;
     }
 
     public boolean isAvailable() {
@@ -230,6 +242,11 @@ public final class UltimateUiBridge {
     }
 
     private void resolveApi() {
+        // Al gekoppeld, of vorige poging definitief mislukt: niet opnieuw (duur) scannen.
+        // Een nieuwe poging gebeurt alleen via init() (startup-retries) of de PluginEnableEvent.
+        if (api != null || resolutionExhausted) {
+            return;
+        }
         Plugin uiPlugin = findUltimateUiPlugin();
         if (uiPlugin != null) {
             for (String className : discoverApiClassNames(uiPlugin)) {
@@ -258,7 +275,14 @@ public final class UltimateUiBridge {
         }
 
         tryBindFromServices();
+        if (api != null) {
+            return;
+        }
         scanAllPluginsForApiInJars();
+        if (api == null) {
+            // Geen Ultimate UI gevonden — markeer als uitgeput zodat de hot path niet elke tick herscant.
+            resolutionExhausted = true;
+        }
     }
 
     private boolean tryBindApiClass(String className, ClassLoader loader, String source) {

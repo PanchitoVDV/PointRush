@@ -299,14 +299,22 @@ public final class CtfGame {
         player.setFallDistance(0f);
         clearPotionEffects(player);
 
-        Location spawn = config.getRoundTeamSpawn(ps.getSide(), 1);
-        if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
-        }
-        giveKit(player, ps.getSide());
         scoreboard.attach(player);
         player.sendMessage(Messages.info("Je zit in team "
                 + ps.getSide().getDisplayName() + " — wisselend verstoppen en zoeken!"));
+
+        Location spawn = config.getRoundTeamSpawn(ps.getSide(), 1);
+        if (spawn != null) {
+            // Kit pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) 'm meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    giveKit(player, ps.getSide());
+                }
+            });
+        } else {
+            giveKit(player, ps.getSide());
+        }
     }
 
     /** Called from {@link CtfListener} after the player has actually respawned. */
@@ -636,10 +644,9 @@ public final class CtfGame {
             ps.addPointsEarned(points);
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             if (team != null && awardedTeams.add(team.getId())) {
-                team.addPoints(points);
+                dataManager.addTeamPoints(team, points);
             }
         }
-        dataManager.save();
 
         Component msg = Component.text()
                 .append(Component.text(winner.getDisplayName(), winner.getTextColor(), TextDecoration.BOLD))
@@ -690,10 +697,9 @@ public final class CtfGame {
             ps.addPointsEarned(WIN_BONUS_POINTS);
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             if (team != null && awardedTeams.add(team.getId())) {
-                team.addPoints(WIN_BONUS_POINTS);
+                dataManager.addTeamPoints(team, WIN_BONUS_POINTS);
             }
         }
-        dataManager.save();
     }
 
     /**

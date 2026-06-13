@@ -135,6 +135,9 @@ public final class HoldTheCrownCommand implements CommandExecutor, TabCompleter 
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "holdthecrown")) {
+            return;
+        }
         if (game.getState() != HoldTheCrownGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Hold the Crown event."));
             return;

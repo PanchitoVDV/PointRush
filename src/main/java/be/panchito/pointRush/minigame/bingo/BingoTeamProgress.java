@@ -5,7 +5,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
-import java.util.EnumSet;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -16,6 +17,11 @@ public final class BingoTeamProgress {
     private final UUID bucketId;
     private final String label;
     private final boolean[] checked = new boolean[BingoGrid.TOTAL];
+    /**
+     * Aantal van elk materiaal dat het team al bezat bij de start. Een vak telt pas af zodra het team
+     * méér van dat materiaal heeft dan dit basisaantal — zo telt loot van vóór het event niet mee.
+     */
+    private final Map<Material, Integer> baselineCounts = new EnumMap<>(Material.class);
     private long completedAtMs = 0L;
     private boolean completionAnnounced = false;
 
@@ -78,19 +84,37 @@ public final class BingoTeamProgress {
     }
 
     /**
-     * Scant team-inventories en vinkt nieuwe vakken af. Returns true als er voortgang was.
+     * Legt vast hoeveel van elk materiaal deze speler al bezit; opgeteld vormt dit het basisaantal van
+     * het team. Aanroepen bij het toetreden, vóór er gesynchroniseerd wordt — zo telt bestaande loot
+     * niet mee op de kaart.
+     */
+    public void addBaseline(Player player) {
+        if (player == null) return;
+        Map<Material, Integer> counts = new EnumMap<>(Material.class);
+        ingest(player.getInventory(), counts);
+        for (Map.Entry<Material, Integer> e : counts.entrySet()) {
+            baselineCounts.merge(e.getKey(), e.getValue(), Integer::sum);
+        }
+    }
+
+    /**
+     * Scant team-inventories en vinkt nieuwe vakken af. Een vak telt pas wanneer het team méér van het
+     * materiaal heeft dan bij de start (basisaantal). Returns true als er voortgang was.
      */
     public boolean syncFromPlayers(Iterable<Player> members, Material[] cardTiles) {
-        EnumSet<Material> union = EnumSet.noneOf(Material.class);
+        Map<Material, Integer> current = new EnumMap<>(Material.class);
         for (Player player : members) {
             if (player == null) continue;
-            ingest(player.getInventory(), union);
+            ingest(player.getInventory(), current);
         }
 
         boolean advanced = false;
         for (int i = 0; i < BingoGrid.TOTAL; i++) {
             if (i == BingoGrid.FREE_INDEX || checked[i]) continue;
-            if (union.contains(cardTiles[i])) {
+            Material need = cardTiles[i];
+            int have = current.getOrDefault(need, 0);
+            int baseline = baselineCounts.getOrDefault(need, 0);
+            if (have > baseline) {
                 checked[i] = true;
                 advanced = true;
             }
@@ -98,18 +122,18 @@ public final class BingoTeamProgress {
         return advanced;
     }
 
-    private static void ingest(PlayerInventory inv, EnumSet<Material> acc) {
+    private static void ingest(PlayerInventory inv, Map<Material, Integer> acc) {
         for (ItemStack stack : inv.getStorageContents()) {
-            if (stack == null || stack.getType().isAir()) continue;
-            acc.add(stack.getType());
+            add(acc, stack);
         }
         for (ItemStack stack : inv.getArmorContents()) {
-            if (stack == null || stack.getType().isAir()) continue;
-            acc.add(stack.getType());
+            add(acc, stack);
         }
-        ItemStack off = inv.getItemInOffHand();
-        if (off != null && !off.getType().isAir()) {
-            acc.add(off.getType());
-        }
+        add(acc, inv.getItemInOffHand());
+    }
+
+    private static void add(Map<Material, Integer> acc, ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return;
+        acc.merge(stack.getType(), stack.getAmount(), Integer::sum);
     }
 }

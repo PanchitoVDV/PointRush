@@ -148,6 +148,9 @@ public final class RaceCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "race")) {
+            return;
+        }
         if (game.getState() != RaceGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een race event."));
             return;

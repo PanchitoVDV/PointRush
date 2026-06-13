@@ -266,13 +266,21 @@ public final class BossEventGame {
         player.setGameMode(GameMode.SURVIVAL);
 
         BossEventArenaRun run = getArenaForPlayer(player.getUniqueId());
-        if (run != null && run.getConfig().getPlayerSpawn() != null) {
-            plugin.getTeleporter().teleport(player, run.getConfig().getPlayerSpawn());
-        }
-        BossEventKit.give(player);
         scoreboard.attach(player);
         player.sendMessage(Messages.info("Boss Event — arena " + ps.getArenaId()
                 + " (" + run.getPlayers().size() + " spelers)."));
+
+        if (run != null && run.getConfig().getPlayerSpawn() != null) {
+            // Kit pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) 'm meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, run.getConfig().getPlayerSpawn(), false, () -> {
+                if (player.isOnline() && getArenaForPlayer(player.getUniqueId()) != null) {
+                    BossEventKit.give(player);
+                }
+            });
+        } else {
+            BossEventKit.give(player);
+        }
     }
 
     private void tick() {
@@ -442,10 +450,9 @@ public final class BossEventGame {
             }
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             if (team != null) {
-                team.addPoints(pts);
+                dataManager.addTeamPoints(team, pts);
             }
         }
-        dataManager.save();
     }
 
     private void beginFinalCountdown() {
@@ -702,7 +709,7 @@ public final class BossEventGame {
                 }
                 Team team = teamManager.getTeamOfPlayer(ps.getUuid());
                 if (team != null) {
-                    team.addPoints(bonus);
+                    dataManager.addTeamPoints(team, bonus);
                 }
             } else if (!ps.isArenaSurvivor() && consolation > 0) {
                 ps.addPointsEarned(consolation);
@@ -711,11 +718,10 @@ public final class BossEventGame {
                 }
                 Team team = teamManager.getTeamOfPlayer(ps.getUuid());
                 if (team != null) {
-                    team.addPoints(consolation);
+                    dataManager.addTeamPoints(team, consolation);
                 }
             }
         }
-        dataManager.save();
     }
 
     private void cleanupAllArenaBosses() {

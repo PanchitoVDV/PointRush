@@ -76,6 +76,8 @@ public final class FloorIsLavaGame {
     private int currentLavaY = Integer.MIN_VALUE;
     private long nextLavaRiseMs = 0L;
     private long nextItemDropMs = 0L;
+    /** Live-override (ms) voor het stijg-interval tijdens de huidige game; 0 = gebruik config. */
+    private long runtimeLavaRiseMs = 0L;
     private boolean historyRecorded = false;
 
     private BukkitTask countdownTask;
@@ -133,6 +135,34 @@ public final class FloorIsLavaGame {
         return nextLavaRiseMs;
     }
 
+    /** Huidig stijg-interval in ms: live-override als die gezet is, anders de config-waarde. */
+    private long lavaRiseIntervalMs() {
+        return runtimeLavaRiseMs > 0L ? runtimeLavaRiseMs : config.getLavaRiseIntervalTicks() * 50L;
+    }
+
+    /**
+     * Zet live (alleen voor de lopende game) hoe vaak de lava stijgt — lager = sneller. Werkt direct
+     * op de eerstvolgende stijging en wordt niet opgeslagen. Returnt false als er geen game loopt.
+     */
+    public boolean setRuntimeLavaRiseSeconds(int seconds) {
+        if (state != State.RUNNING) {
+            return false;
+        }
+        runtimeLavaRiseMs = Math.max(1, seconds) * 1000L;
+        nextLavaRiseMs = System.currentTimeMillis() + runtimeLavaRiseMs;
+        return true;
+    }
+
+    /** Laat de lava meteen één laag stijgen (alleen tijdens een lopende game). */
+    public boolean forceLavaRiseNow() {
+        if (state != State.RUNNING) {
+            return false;
+        }
+        riseLavaLayer();
+        nextLavaRiseMs = System.currentTimeMillis() + lavaRiseIntervalMs();
+        return true;
+    }
+
     public long getNextItemDropMs() {
         return nextItemDropMs;
     }
@@ -156,6 +186,7 @@ public final class FloorIsLavaGame {
         currentLavaY = Integer.MIN_VALUE;
         nextLavaRiseMs = 0L;
         nextItemDropMs = 0L;
+        runtimeLavaRiseMs = 0L;
         lavaBlocks.clear();
         playerPlacedBlocks.clear();
 
@@ -251,12 +282,21 @@ public final class FloorIsLavaGame {
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        Location spawn = config.getSpawn();
-        if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
-        }
         scoreboard.attach(player);
         player.sendMessage(Messages.info("Floor is Lava start binnenkort — bouwblokken (max 3 per soort), zelden knock-items!"));
+
+        Location spawn = config.getSpawn();
+        if (spawn != null) {
+            // Lege inventory ná de (mogelijk async, cross-world) teleport, zodat er geen items van een
+            // vorig event achterblijven; de bouwblokken volgen bij de start. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    player.getInventory().clear();
+                }
+            });
+        } else {
+            player.getInventory().clear();
+        }
     }
 
     private void startCountdown() {
@@ -291,7 +331,7 @@ public final class FloorIsLavaGame {
             currentLavaY = config.getRegionMin().getBlockY() - 1;
         }
         long now = System.currentTimeMillis();
-        nextLavaRiseMs = now + config.getLavaRiseIntervalTicks() * 50L;
+        nextLavaRiseMs = now + lavaRiseIntervalMs();
 
         for (UUID id : players.keySet()) {
             Player p = Bukkit.getPlayer(id);
@@ -330,7 +370,7 @@ public final class FloorIsLavaGame {
             long now = System.currentTimeMillis();
             if (now < nextLavaRiseMs) return;
             riseLavaLayer();
-            nextLavaRiseMs = now + config.getLavaRiseIntervalTicks() * 50L;
+            nextLavaRiseMs = now + lavaRiseIntervalMs();
         }, 20L, 20L);
     }
 
@@ -535,8 +575,7 @@ public final class FloorIsLavaGame {
         int pts = pointsForPlacement(ps.getPlacement());
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null && pts > 0) {
-            team.addPoints(pts);
-            dataManager.save();
+            dataManager.addTeamPoints(team, pts);
         }
 
         player.setGameMode(GameMode.SPECTATOR);
@@ -605,11 +644,8 @@ public final class FloorIsLavaGame {
             ps.setPlacement(1);
             Team team = teamManager.getTeamOfPlayer(id);
             if (team != null) {
-                team.addPoints(pointsForPlacement(1));
+                dataManager.addTeamPoints(team, pointsForPlacement(1));
             }
-        }
-        if (!alive.isEmpty()) {
-            dataManager.save();
         }
 
         announceWinner(alive);

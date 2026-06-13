@@ -266,13 +266,21 @@ public final class KothGame {
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        Location spawn = config.getSpawn();
-        if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
-        }
-        giveKit(player);
         scoreboard.attach(player);
         player.sendMessage(Messages.info("KOTH start binnenkort — cap de hill, knock elkaar eraf!"));
+
+        Location spawn = config.getSpawn();
+        if (spawn != null) {
+            // Kit pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) 'm meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    giveKit(player);
+                }
+            });
+        } else {
+            giveKit(player);
+        }
     }
 
     /** Wipeout kit: trident + knock items. */
@@ -398,8 +406,7 @@ public final class KothGame {
 
         Team team = teamManager.getTeam(bucket);
         if (team != null) {
-            team.addPoints(1);
-            dataManager.save();
+            dataManager.addTeamPoints(team, 1);
             for (KothPlayerState ps : players.values()) {
                 if (!ps.isAlive()) continue;
                 Team t = teamManager.getTeamOfPlayer(ps.getUuid());
@@ -687,8 +694,7 @@ public final class KothGame {
         if (winnerBucket != null && topScore > 0) {
             Team team = teamManager.getTeam(winnerBucket);
             if (team != null) {
-                team.addPoints(WIN_BONUS_POINTS);
-                dataManager.save();
+                dataManager.addTeamPoints(team, WIN_BONUS_POINTS);
             }
         }
 

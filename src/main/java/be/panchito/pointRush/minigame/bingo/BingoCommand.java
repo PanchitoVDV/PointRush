@@ -87,7 +87,7 @@ public final class BingoCommand implements CommandExecutor, TabCompleter {
         if (Commands.isAdmin(sender, PERMISSION)) {
             sender.sendMessage(line("/bingo start", "Start bingo (1 uur)"));
             sender.sendMessage(line("/bingo stop", "Stop het event"));
-            sender.sendMessage(line("/bingo setspawn", "Optionele hub-locatie"));
+            sender.sendMessage(line("/bingo setspawn", "Spawn in de bingo-wereld (verplicht)"));
             sender.sendMessage(line("/bingo setduration <min>", "Duur (default 60)"));
             sender.sendMessage(line("/bingo reload", "Herlaad config"));
         }
@@ -148,11 +148,14 @@ public final class BingoCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.error("Je doet niet mee aan Bingo."));
             return;
         }
-        game.removeParticipant(player);
+        game.removeParticipant(player, true);
         player.sendMessage(Messages.info("Je hebt Bingo verlaten."));
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "bingo")) {
+            return;
+        }
         if (game.getState() != BingoGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Bingo event."));
             return;
@@ -160,6 +163,11 @@ public final class BingoCommand implements CommandExecutor, TabCompleter {
         if (!config.isReady()) {
             sender.sendMessage(Messages.error("Material pool te klein (min "
                     + BingoGrid.RANDOM_SLOTS + " items)."));
+            return;
+        }
+        if (!config.hasSpawn()) {
+            sender.sendMessage(Messages.error("Stel eerst de bingo-spawn in met /bingo setspawn "
+                    + "(spelers worden daarheen geteleporteerd)."));
             return;
         }
         if (!game.start()) {
@@ -183,7 +191,7 @@ public final class BingoCommand implements CommandExecutor, TabCompleter {
             return;
         }
         config.setSpawn(player.getLocation());
-        sender.sendMessage(Messages.success("Bingo spawn opgeslagen."));
+        sender.sendMessage(Messages.success("Bingo-wereld spawn opgeslagen op je huidige locatie."));
     }
 
     private void handleSetDuration(CommandSender sender, String[] args) {

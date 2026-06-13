@@ -9,6 +9,7 @@ import be.panchito.pointRush.util.SmallText;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -77,11 +78,11 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Component.text(SmallText.of("--- PointRush Points ---"),
                 NamedTextColor.GOLD, TextDecoration.BOLD));
         sender.sendMessage(line("/points top", "Bekijk de leaderboard"));
-        sender.sendMessage(line("/points get [team]", "Toon punten van een team"));
+        sender.sendMessage(line("/points get [team|speler]", "Toon punten van een team"));
         if (sender.hasPermission(PERMISSION)) {
-            sender.sendMessage(line("/points add <team> <n>", "Voeg punten toe"));
-            sender.sendMessage(line("/points remove <team> <n>", "Trek punten af"));
-            sender.sendMessage(line("/points set <team> <n>", "Stel punten in"));
+            sender.sendMessage(line("/points add <team|speler> <n>", "Voeg punten toe"));
+            sender.sendMessage(line("/points remove <team|speler> <n>", "Trek punten af"));
+            sender.sendMessage(line("/points set <team|speler> <n>", "Stel punten in"));
             sender.sendMessage(line("/points reset", "Reset alle punten naar 0"));
         }
     }
@@ -98,12 +99,12 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
 
     private void handleModify(CommandSender sender, String[] args, ModifyMode mode) {
         if (args.length < 3) {
-            sender.sendMessage(Messages.error("Gebruik: /points " + mode.name().toLowerCase() + " <team> <aantal>"));
+            sender.sendMessage(Messages.error("Gebruik: /points " + mode.name().toLowerCase()
+                    + " <team|speler> <aantal>"));
             return;
         }
-        Team team = teamManager.getTeamByName(args[1]);
+        Team team = resolveTarget(sender, args[1]);
         if (team == null) {
-            sender.sendMessage(Messages.error("Geen team met die naam."));
             return;
         }
         long amount;
@@ -119,11 +120,10 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
         }
 
         switch (mode) {
-            case ADD -> team.addPoints(amount);
-            case REMOVE -> team.removePoints(amount);
-            case SET -> team.setPoints(amount);
+            case ADD -> dataManager.addTeamPoints(team, amount);
+            case REMOVE -> dataManager.removeTeamPoints(team, amount);
+            case SET -> dataManager.setTeamPoints(team, amount);
         }
-        dataManager.save();
 
         sender.sendMessage(Messages.success(
                 "Team " + team.getName() + " heeft nu " + team.getPoints() + " punten."));
@@ -131,12 +131,32 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
 
 
 
+    /**
+     * Resolvet een doelteam uit een argument dat ofwel een teamnaam ofwel een (online) spelernaam is.
+     * Stuurt zelf een foutmelding en geeft {@code null} terug als er niets gevonden wordt.
+     */
+    private Team resolveTarget(CommandSender sender, String arg) {
+        Team team = teamManager.getTeamByName(arg);
+        if (team != null) {
+            return team;
+        }
+        Player online = Bukkit.getPlayerExact(arg);
+        if (online != null) {
+            Team playerTeam = teamManager.getTeamOfPlayer(online.getUniqueId());
+            if (playerTeam == null) {
+                sender.sendMessage(Messages.error(online.getName() + " zit niet in een team."));
+            }
+            return playerTeam;
+        }
+        sender.sendMessage(Messages.error("Geen team of online speler met die naam."));
+        return null;
+    }
+
     private void handleGet(CommandSender sender, String[] args) {
         Team team = null;
         if (args.length >= 2) {
-            team = teamManager.getTeamByName(args[1]);
+            team = resolveTarget(sender, args[1]);
             if (team == null) {
-                sender.sendMessage(Messages.error("Geen team met die naam."));
                 return;
             }
         } else if (sender instanceof Player player) {
@@ -181,9 +201,8 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
 
     private void handleReset(CommandSender sender) {
         for (Team team : teamManager.getTeams()) {
-            team.setPoints(0);
+            dataManager.setTeamPoints(team, 0);
         }
-        dataManager.save();
         sender.sendMessage(Messages.success("Alle team punten zijn gereset naar 0."));
     }
 
@@ -196,7 +215,12 @@ public final class PointsCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             String sub = args[0].toLowerCase(Locale.ROOT);
             if (sub.equals("add") || sub.equals("remove") || sub.equals("set") || sub.equals("get")) {
-                return Commands.filterPrefix(teamManager.getTeams().stream().map(Team::getName).toList(), args[1]);
+                List<String> targets = new ArrayList<>(
+                        teamManager.getTeams().stream().map(Team::getName).toList());
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    targets.add(online.getName());
+                }
+                return Commands.filterPrefix(targets, args[1]);
             }
         }
         if (args.length == 3) {

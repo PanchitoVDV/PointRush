@@ -150,6 +150,9 @@ public final class TreasureHuntCommand implements CommandExecutor, TabCompleter 
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "treasurehunt")) {
+            return;
+        }
         if (game.getState() != TreasureHuntGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Treasure Hunt."));
             return;

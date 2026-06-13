@@ -710,8 +710,7 @@ public final class RaceGame {
         int points = placement <= PLACEMENT_POINTS.length ? PLACEMENT_POINTS[placement - 1] : 0;
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null && points > 0) {
-            team.addPoints(points);
-            dataManager.save();
+            dataManager.addTeamPoints(team, points);
         }
 
         Component msg;

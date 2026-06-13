@@ -29,7 +29,8 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = List.of(
             "start", "stop", "info", "setspawn", "pos1", "pos2",
-            "setdeathy", "setlava", "setitems", "setknock", "reload", "leave", "help"
+            "setdeathy", "setlava", "lavaspeed", "lavanow", "setitems", "setknock",
+            "reload", "leave", "help"
     );
 
     private final FloorIsLavaGame game;
@@ -75,6 +76,8 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
             case "pos2" -> handleSetCorner(sender, 2);
             case "setdeathy" -> handleSetDeathY(sender, args);
             case "setlava" -> handleSetLavaRise(sender, args);
+            case "lavaspeed", "fastlava" -> handleLavaSpeed(sender, args);
+            case "lavanow", "riselava" -> handleLavaNow(sender);
             case "setitems" -> handleSetItemDrop(sender, args);
             case "setknock" -> handleSetKnock(sender, args);
             case "reload" -> handleReload(sender);
@@ -94,7 +97,9 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(line("/floorislava pos1", "Markeer hoek 1 van de arena"));
             sender.sendMessage(line("/floorislava pos2", "Markeer hoek 2 van de arena"));
             sender.sendMessage(line("/floorislava setdeathy <y>", "Stel de death plane Y in"));
-            sender.sendMessage(line("/floorislava setlava <sec>", "Seconden tussen lava-stijging (min 30)"));
+            sender.sendMessage(line("/floorislava setlava <sec>", "Standaard seconden tussen lava-stijging (min 30)"));
+            sender.sendMessage(line("/floorislava lavaspeed <sec>", "LIVE: lava sneller laten stijgen deze ronde (3-300)"));
+            sender.sendMessage(line("/floorislava lavanow", "LIVE: laat de lava nu meteen een laag stijgen"));
             sender.sendMessage(line("/floorislava setitems <sec>", "Seconden tussen random kit-drop (min 10)"));
             sender.sendMessage(line("/floorislava setknock <horiz> [omhoog]", "Knock-sterkte sneeuwbal/ei (0-3)"));
             sender.sendMessage(line("/floorislava start", "Start het event"));
@@ -139,6 +144,9 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "floorislava")) {
+            return;
+        }
         if (game.getState() != FloorIsLavaGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Floor is Lava event."));
             return;
@@ -214,6 +222,39 @@ public final class FloorIsLavaCommand implements CommandExecutor, TabCompleter {
         }
         config.setLavaRiseSeconds(sec);
         sender.sendMessage(Messages.success("Lava stijgt nu elke " + sec + " seconden."));
+    }
+
+    private void handleLavaSpeed(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Messages.error("Gebruik: /floorislava lavaspeed <seconden>"));
+            return;
+        }
+        int sec;
+        try {
+            sec = Integer.parseInt(args[1]);
+        } catch (NumberFormatException ex) {
+            sender.sendMessage(Messages.error("Seconden moet een geheel getal zijn."));
+            return;
+        }
+        if (sec < 3 || sec > 300) {
+            sender.sendMessage(Messages.error("Waarde moet tussen 3 en 300 seconden zijn."));
+            return;
+        }
+        if (!game.setRuntimeLavaRiseSeconds(sec)) {
+            sender.sendMessage(Messages.error("Er loopt geen Floor is Lava game. "
+                    + "Gebruik /floorislava setlava voor de standaardsnelheid."));
+            return;
+        }
+        sender.sendMessage(Messages.success("Lava stijgt nu elke " + sec
+                + "s in de lopende game (tijdelijk — niet opgeslagen)."));
+    }
+
+    private void handleLavaNow(CommandSender sender) {
+        if (!game.forceLavaRiseNow()) {
+            sender.sendMessage(Messages.error("Er loopt geen Floor is Lava game."));
+            return;
+        }
+        sender.sendMessage(Messages.success("Lava stijgt direct één laag."));
     }
 
     private void handleSetItemDrop(CommandSender sender, String[] args) {

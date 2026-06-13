@@ -124,6 +124,11 @@ public final class BingoConfig {
         return spawn;
     }
 
+    /** True als er een spawn is ingesteld (los van of de doelwereld al geladen is). */
+    public boolean hasSpawn() {
+        return hasSpawn && spawnWorld != null;
+    }
+
     public void setSpawn(Location loc) {
         this.spawn = loc.clone();
         this.spawnWorld = loc.getWorld() != null ? loc.getWorld().getName() : null;
