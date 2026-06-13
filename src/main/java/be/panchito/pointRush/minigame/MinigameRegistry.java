@@ -63,6 +63,19 @@ public final class MinigameRegistry {
     }
 
     /**
+     * Start de minigame met dit id als die klaar en idle is. Returnt {@code true} bij succes.
+     * Gebruikt door de cross-server events-host om het gekozen event lokaal te starten.
+     */
+    public static boolean startMinigame(PointRush plugin, String id) {
+        for (RandomCandidate c : randomCandidates(plugin)) {
+            if (c.id().equals(id)) {
+                return c.ready() && c.start();
+            }
+        }
+        return false;
+    }
+
+    /**
      * True when at least one minigame is not {@code IDLE} (starting, running or intermission).
      */
     public static boolean anyActive(PointRush plugin) {
@@ -107,6 +120,11 @@ public final class MinigameRegistry {
      * True when the player is inside an arena minigame that owns its own scoreboard.
      */
     public static boolean isPlayerInActiveEvent(PointRush plugin, UUID playerId) {
+        // Gold Rush is server-breed: zolang het loopt telt iedereen als deelnemer (eigen sidebar-scoreboard).
+        if (plugin.getGoldRushGame() != null
+                && plugin.getGoldRushGame().getState() != GoldRushGame.State.IDLE) {
+            return true;
+        }
         return participant(plugin.getParkourGame(), playerId)
                 || participant(plugin.getTntTagGame(), playerId)
                 || participant(plugin.getTntRunGame(), playerId)

@@ -107,6 +107,9 @@ public final class TntTagCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "tnttag")) {
+            return;
+        }
         if (game.getState() != TntTagGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een TNT Tag event."));
             return;

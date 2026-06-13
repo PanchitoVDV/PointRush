@@ -121,12 +121,15 @@ public final class MinigameHudService {
         playerCount = viewers.size();
 
         Set<UUID> stillVisible = new HashSet<>();
+        // Alleen de Ultimate UI page (her)openen als de bridge daadwerkelijk gekoppeld is. Zonder
+        // koppeling was dit per kijker een dure plugin-JAR-scan → de random lag-spikes.
+        boolean bridgeReady = bridge.isAvailable();
         for (Player viewer : viewers) {
             UUID id = viewer.getUniqueId();
             stillVisible.add(id);
             boolean isNew = shown.add(id);
             // Open de page bij nieuwe kijkers en herlaad hem bij elke tick (refresh placeholders).
-            if (isNew || refreshTicks > 0) {
+            if (bridgeReady && (isNew || refreshTicks > 0)) {
                 bridge.openPersistentHud(viewer, pageId);
             }
         }

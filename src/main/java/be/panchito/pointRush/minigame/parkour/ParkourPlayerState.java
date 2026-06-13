@@ -3,6 +3,8 @@ package be.panchito.pointRush.minigame.parkour;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -33,6 +35,9 @@ public final class ParkourPlayerState {
     private boolean shopParkourSpeed;
     private boolean shopParkourJump;
     private boolean shopParkourCloud;
+
+    /** Per-item cooldown-eindtijden (epoch ms), gekeyd op item-tag. */
+    private final Map<String, Long> cooldownUntilMs = new HashMap<>();
 
     public ParkourPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode) {
         this.uuid = uuid;
@@ -110,5 +115,22 @@ public final class ParkourPlayerState {
 
     public void setShopParkourCloud(boolean shopParkourCloud) {
         this.shopParkourCloud = shopParkourCloud;
+    }
+
+    /** True zolang het item onder {@code key} nog op cooldown staat. */
+    public boolean isOnCooldown(String key, long now) {
+        Long until = cooldownUntilMs.get(key);
+        return until != null && until > now;
+    }
+
+    /** Resterende cooldown in ms voor {@code key} (0 als vrij). */
+    public long cooldownRemainingMs(String key, long now) {
+        Long until = cooldownUntilMs.get(key);
+        return until == null ? 0L : Math.max(0L, until - now);
+    }
+
+    /** Start een cooldown van {@code durationMs} voor {@code key}. */
+    public void startCooldown(String key, long now, long durationMs) {
+        cooldownUntilMs.put(key, now + durationMs);
     }
 }

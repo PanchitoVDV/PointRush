@@ -2,7 +2,10 @@ name: PointRush
 version: '${version}'
 main: be.panchito.pointRush.PointRush
 api-version: '1.21'
-load: STARTUP
+# POSTWORLD (Bukkit-default): laad PointRush pas nadat de werelden geladen zijn. Met load: STARTUP
+# draait onEnable vóór het laden van werelden, waardoor Bukkit.getWorld(...) null geeft en alle
+# locatie-configs (spawn/finish/checkpoints/regions) als "niet ingesteld" inladen na een herstart.
+load: POSTWORLD
 authors: [ Panchito ]
 description: Plugin van cloudito.cloud
 website: cloudito.cloud

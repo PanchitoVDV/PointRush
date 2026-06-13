@@ -167,6 +167,9 @@ public final class KothCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "koth")) {
+            return;
+        }
         if (game.getState() != KothGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een KOTH event."));
             return;

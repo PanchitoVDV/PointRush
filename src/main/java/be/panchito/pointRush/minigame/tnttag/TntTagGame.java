@@ -314,14 +314,23 @@ public final class TntTagGame {
         player.setFallDistance(0f);
         clearPotionEffects(player);
 
+        scoreboard.attach(player);
+        player.sendMessage(Messages.info("TNT Tag start binnenkort - maak je klaar!"));
+
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
+            // Items pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) ze meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    player.getInventory().clear();
+                    MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_TAG);
+                }
+            });
+        } else {
+            player.getInventory().clear();
+            MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_TAG);
         }
-        MinigameGadgetItems.giveGadgetRow(plugin, player.getInventory(), MinigameGadgetMode.TNT_TAG);
-        scoreboard.attach(player);
-
-        player.sendMessage(Messages.info("TNT Tag start binnenkort - maak je klaar!"));
     }
 
     private void clearPotionEffects(Player player) {
@@ -506,12 +515,9 @@ public final class TntTagGame {
             ps.incrementRoundsSurvived();
             Team team = teamManager.getTeamOfPlayer(id);
             if (team != null && POINTS_PER_ROUND_SURVIVED > 0) {
-                team.addPoints(POINTS_PER_ROUND_SURVIVED);
+                dataManager.addTeamPoints(team, POINTS_PER_ROUND_SURVIVED);
                 ps.addPointsEarned(POINTS_PER_ROUND_SURVIVED);
             }
-        }
-        if (!survivors.isEmpty()) {
-            dataManager.save();
         }
 
         // win condition: 0 or 1 team left alive (or <=1 player left)
@@ -563,8 +569,7 @@ public final class TntTagGame {
             int memberCount = teamCount.get(winningTeamId);
             int bonus = POINTS_LAST_TEAM_BONUS;
             if (t != null) {
-                t.addPoints(bonus);
-                dataManager.save();
+                dataManager.addTeamPoints(t, bonus);
                 int share = memberCount > 0 ? bonus / memberCount : bonus;
                 for (UUID id : survivors) {
                     TntTagPlayerState ps = players.get(id);
@@ -594,8 +599,7 @@ public final class TntTagGame {
                     .build();
             Team t = teamManager.getTeamOfPlayer(solo);
             if (t != null) {
-                t.addPoints(POINTS_LAST_PLAYER_BONUS);
-                dataManager.save();
+                dataManager.addTeamPoints(t, POINTS_LAST_PLAYER_BONUS);
             }
             TntTagPlayerState soloPs = players.get(solo);
             if (soloPs != null) soloPs.addPointsEarned(POINTS_LAST_PLAYER_BONUS);

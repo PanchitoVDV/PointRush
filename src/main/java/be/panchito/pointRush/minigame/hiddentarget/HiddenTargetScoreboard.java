@@ -157,7 +157,7 @@ public final class HiddenTargetScoreboard {
         lines.add(Component.text(SmallText.of("hidden target"), NamedTextColor.DARK_RED, TextDecoration.BOLD));
 
         if (state == HiddenTargetGame.State.STARTING) {
-            lines.add(Component.text(SmallText.of("countdown ") + game.formatTime(game.getCountdownTimeLeftMs()),
+            lines.add(Component.text(SmallText.of("opstellen ") + game.formatTime(game.getCountdownTimeLeftMs()),
                     NamedTextColor.GRAY));
         } else if (state == HiddenTargetGame.State.RUNNING) {
             lines.add(Component.text()
@@ -235,7 +235,7 @@ public final class HiddenTargetScoreboard {
     private List<HiddenTargetPlayerState> computeTopKillers() {
         List<HiddenTargetPlayerState> list = new ArrayList<>(game.getAllPlayerStates());
         list.sort(Comparator.comparingInt(HiddenTargetPlayerState::getTargetKills).reversed()
-                .thenComparingInt(HiddenTargetPlayerState::netScore).reversed());
+                .thenComparing(Comparator.comparingInt(HiddenTargetPlayerState::netScore).reversed()));
         return list;
     }
 

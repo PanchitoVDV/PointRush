@@ -30,6 +30,8 @@ import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.FireworkMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
@@ -51,9 +53,9 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class HiddenTargetGame {
 
-    public enum State { IDLE, STARTING, RUNNING }
+    public enum State { IDLE, STARTING, RUNNING, ENDING }
 
-    public static final int COUNTDOWN_SECONDS = 10;
+    public static final int COUNTDOWN_SECONDS = 30;
     public static final int WIN_BONUS_POINTS = 75;
     public static final int COMPASS_SLOT = 8;
 
@@ -138,6 +140,12 @@ public final class HiddenTargetGame {
         historyRecorded = false;
         lastDamagers.clear();
 
+        // Spread players evenly across the configured spawn points (shuffled each start so
+        // the same player doesn't always land on the same one).
+        List<Location> startSpawns = new ArrayList<>(config.getSpawns());
+        Collections.shuffle(startSpawns);
+        int spawnIdx = 0;
+
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.getGameMode() == GameMode.CREATIVE || online.getGameMode() == GameMode.SPECTATOR) {
                 online.sendMessage(Messages.warn("Je doet niet mee aan Hidden Target (creative/spectator)."));
@@ -146,7 +154,9 @@ public final class HiddenTargetGame {
             if (!LobbyWorld.contains(plugin, online)) {
                 continue;
             }
-            joinPlayer(online);
+            Location spawn = startSpawns.isEmpty() ? null : startSpawns.get(spawnIdx % startSpawns.size());
+            spawnIdx++;
+            joinPlayer(online, spawn);
         }
 
         if (players.size() < 2) {
@@ -162,10 +172,10 @@ public final class HiddenTargetGame {
         }
 
         scoreboard.start();
-        scoreboard.updateBossBar("start in " + formatTime(getCountdownTimeLeftMs()), 1.0f, BossBar.Color.YELLOW);
+        scoreboard.updateBossBar("opstellen " + formatTime(getCountdownTimeLeftMs()), 1.0f, BossBar.Color.YELLOW);
         broadcastTitle(
                 Component.text(SmallText.of("HIDDEN TARGET"), NamedTextColor.DARK_RED, TextDecoration.BOLD),
-                Component.text(SmallText.of("volg je kompas · kill je target · geen teamgenoten"), NamedTextColor.GRAY)
+                Component.text(SmallText.of("stel je op · straks krijg je een geheime target"), NamedTextColor.GRAY)
         );
         playSoundAll(Sound.BLOCK_NOTE_BLOCK_BELL, 0.8f, 1.2f);
 
@@ -216,7 +226,7 @@ public final class HiddenTargetGame {
         }
     }
 
-    private void joinPlayer(Player player) {
+    private void joinPlayer(Player player, Location spawn) {
         HiddenTargetPlayerState ps = new HiddenTargetPlayerState(
                 player.getUniqueId(),
                 player.getLocation().clone(),
@@ -229,25 +239,58 @@ public final class HiddenTargetGame {
         player.setFireTicks(0);
         player.setFallDistance(0f);
 
-        giveKit(player);
         scoreboard.attach(player);
-        player.sendMessage(Messages.info("Hidden Target start binnenkort — volg je kompas naar je geheime target!"));
+        player.sendMessage(Messages.info("Hidden Target start binnenkort — stel je strategisch op, je target volgt zo!"));
+
+        // Kit pas ná de (async, mogelijk cross-world) teleport geven — anders wist een per-wereld
+        // inventory-swap (Multiverse-Inventories) 'm meteen weer. beginRun() her-equipt later nog
+        // autoritair na de countdown. Zie ParkourGame#joinPlayer.
+        if (spawn != null && spawn.getWorld() != null) {
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    giveKit(player);
+                }
+            });
+        } else {
+            giveKit(player);
+        }
     }
 
     public void giveKit(Player player) {
         player.getInventory().clear();
 
-        ItemStack sword = new ItemStack(Material.IRON_SWORD);
+        // Diamond armor — Protection IV, unbreakable.
+        ItemStack helmet = new ItemStack(Material.DIAMOND_HELMET);
+        ItemStack chest = new ItemStack(Material.DIAMOND_CHESTPLATE);
+        ItemStack legs = new ItemStack(Material.DIAMOND_LEGGINGS);
+        ItemStack boots = new ItemStack(Material.DIAMOND_BOOTS);
+        for (ItemStack piece : List.of(helmet, chest, legs, boots)) {
+            piece.editMeta(meta -> {
+                meta.addEnchant(Enchantment.PROTECTION, 4, true);
+                meta.setUnbreakable(true);
+            });
+        }
+        // Feather Falling IV on the boots (merges with the Protection IV already applied).
+        boots.editMeta(meta -> meta.addEnchant(Enchantment.FEATHER_FALLING, 4, true));
+        player.getInventory().setHelmet(helmet);
+        player.getInventory().setChestplate(chest);
+        player.getInventory().setLeggings(legs);
+        player.getInventory().setBoots(boots);
+
+        // Diamond sword — Sharpness V, unbreakable.
+        ItemStack sword = new ItemStack(Material.DIAMOND_SWORD);
         sword.editMeta(meta -> {
             meta.displayName(Component.text(SmallText.of("Jager zwaard"), NamedTextColor.RED, TextDecoration.BOLD));
-            meta.addEnchant(Enchantment.SHARPNESS, 1, true);
+            meta.addEnchant(Enchantment.SHARPNESS, 5, true);
             meta.setUnbreakable(true);
         });
 
-        ItemStack bow = new ItemStack(Material.BOW);
-        bow.editMeta(meta -> {
-            meta.displayName(Component.text(SmallText.of("Jager boog"), NamedTextColor.GOLD, TextDecoration.BOLD));
-            meta.addEnchant(Enchantment.POWER, 1, true);
+        // Mace — Wind Burst I, Density V, unbreakable.
+        ItemStack mace = new ItemStack(Material.MACE);
+        mace.editMeta(meta -> {
+            meta.displayName(Component.text(SmallText.of("Jager mace"), NamedTextColor.GOLD, TextDecoration.BOLD));
+            meta.addEnchant(Enchantment.WIND_BURST, 1, true);
+            meta.addEnchant(Enchantment.DENSITY, 5, true);
             meta.setUnbreakable(true);
         });
 
@@ -260,12 +303,28 @@ public final class HiddenTargetGame {
             meta.setUnbreakable(true);
         });
 
+        // Potions don't stack — one item per slot.
+        ItemStack strength = new ItemStack(Material.POTION);
+        strength.editMeta(PotionMeta.class, meta -> meta.setBasePotionType(PotionType.STRONG_STRENGTH));
+        ItemStack speed = new ItemStack(Material.POTION);
+        speed.editMeta(PotionMeta.class, meta -> meta.setBasePotionType(PotionType.SWIFTNESS));
+
         player.getInventory().setItem(0, sword);
-        player.getInventory().setItem(1, bow);
-        player.getInventory().setItem(2, new ItemStack(Material.ARROW, 32));
-        player.getInventory().setItem(3, new ItemStack(Material.GOLDEN_APPLE, 3));
-        player.getInventory().setItem(4, new ItemStack(Material.COOKED_BEEF, 16));
+        player.getInventory().setItem(1, mace);
+        player.getInventory().setItem(2, new ItemStack(Material.GOLDEN_APPLE, 16));
+        player.getInventory().setItem(3, new ItemStack(Material.WIND_CHARGE, 64));
+        player.getInventory().setItem(4, new ItemStack(Material.WIND_CHARGE, 64));
+        player.getInventory().setItem(5, new ItemStack(Material.ENDER_PEARL, 16));
+        player.getInventory().setItem(6, new ItemStack(Material.ENDER_PEARL, 16));
+        player.getInventory().setItem(7, new ItemStack(Material.ENDER_PEARL, 16));
         player.getInventory().setItem(COMPASS_SLOT, compass);
+
+        // 6x Strength II + 6x Speed I + the 4th ender pearl stack in the main inventory.
+        for (int i = 0; i < 6; i++) {
+            player.getInventory().setItem(9 + i, strength.clone());
+            player.getInventory().setItem(15 + i, speed.clone());
+        }
+        player.getInventory().setItem(21, new ItemStack(Material.ENDER_PEARL, 16));
 
         player.setGameMode(GameMode.SURVIVAL);
         player.setHealth(20.0);
@@ -273,6 +332,10 @@ public final class HiddenTargetGame {
         player.setSaturation(20f);
         player.setFireTicks(0);
         player.setFallDistance(0f);
+
+        // Force a slot resync — without this some clients only render the freshly-set gear
+        // after the player re-equips it (a known client-side inventory desync).
+        player.updateInventory();
     }
 
     private void tick() {
@@ -289,7 +352,7 @@ public final class HiddenTargetGame {
     private void tickStarting(long now) {
         long left = Math.max(0L, countdownEndsMs - now);
         float progress = left / (float) (COUNTDOWN_SECONDS * 1000L);
-        scoreboard.updateBossBar("start in " + formatTime(left), progress, BossBar.Color.YELLOW);
+        scoreboard.updateBossBar("opstellen " + formatTime(left), progress, BossBar.Color.YELLOW);
         if (left <= 0) {
             beginRun();
         }
@@ -306,6 +369,17 @@ public final class HiddenTargetGame {
         );
         playSoundAll(Sound.ENTITY_ENDER_DRAGON_GROWL, 0.6f, 1.6f);
         launchFireworkAtSpawn(FireworkEffect.Type.BALL_LARGE, Color.RED, Color.MAROON);
+
+        // Authoritative equip: by now the (async) start teleport and any per-world inventory
+        // swap have long settled (30s countdown), so everyone enters the hunt fully kitted.
+        // Must run before revealInitialTargets() so the freshly-given compass gets its target.
+        for (HiddenTargetPlayerState ps : players.values()) {
+            Player p = Bukkit.getPlayer(ps.getUuid());
+            if (p != null) {
+                giveKit(p);
+            }
+        }
+        revealInitialTargets();
     }
 
     private void tickRunning(long now) {
@@ -324,15 +398,20 @@ public final class HiddenTargetGame {
         for (HiddenTargetPlayerState ps : players.values()) {
             if (!ps.isAlive()) continue;
             UUID targetId = ps.getTargetId();
-            if (targetId == null) continue;
+            if (targetId == null) {
+                // No target right now (e.g. all rivals were down when this hunter last
+                // scored) — keep retrying quietly until one respawns, then announce once.
+                retryTargetIfAvailable(ps);
+                continue;
+            }
 
             Player hunter = Bukkit.getPlayer(ps.getUuid());
-            Player target = Bukkit.getPlayer(targetId);
-            if (hunter == null || target == null || !target.isOnline()) continue;
-            if (!players.containsKey(targetId)) continue;
+            if (hunter == null) continue;
 
             HiddenTargetPlayerState targetPs = players.get(targetId);
-            if (targetPs == null || !targetPs.isAlive()) {
+            Player target = Bukkit.getPlayer(targetId);
+            if (targetPs == null || !targetPs.isAlive() || target == null || !target.isOnline()) {
+                // target died, disconnected, or left the event — pick a fresh one
                 assignTarget(ps.getUuid());
                 continue;
             }
@@ -342,6 +421,8 @@ public final class HiddenTargetGame {
             double dist = hunter.getLocation().distance(target.getLocation());
             hunter.sendActionBar(Component.text()
                     .append(Component.text(SmallText.of("target "), NamedTextColor.DARK_RED, TextDecoration.BOLD))
+                    .append(targetNameComponent(targetId))
+                    .append(Component.text("  ·  ", NamedTextColor.DARK_GRAY))
                     .append(Component.text(formatDistance(dist), NamedTextColor.GOLD))
                     .append(Component.text("  ·  ", NamedTextColor.DARK_GRAY))
                     .append(Component.text(SmallText.of("kills " + ps.getTargetKills()), NamedTextColor.GREEN))
@@ -378,7 +459,7 @@ public final class HiddenTargetGame {
             PlayerRespawnUtil.forceRespawnIfDead(player);
             PlayerRespawnUtil.clearSpectatorState(player);
 
-            Location respawn = config.getSpawn();
+            Location respawn = config.randomSpawn();
             if (respawn == null) {
                 respawn = ps.getSavedLocation();
             }
@@ -444,6 +525,8 @@ public final class HiddenTargetGame {
                     hunted = true;
                     onTargetKill(killer, killerPs, victim, victimPs);
                     reassignedHunter = killer.getUniqueId();
+                } else {
+                    onWrongKill(killer, killerPs);
                 }
             }
         }
@@ -502,19 +585,31 @@ public final class HiddenTargetGame {
         assignTarget(killer.getUniqueId());
     }
 
+    private void onWrongKill(Player killer, HiddenTargetPlayerState killerPs) {
+        int penalty = config.getHuntedPenalty();
+        killerPs.incrementWrongKills();
+        killerPs.addPointsLost(penalty);
+        deductPoints(killer, penalty);
+
+        killer.showTitle(Title.title(
+                Component.text(SmallText.of("FOUTE KILL!"), NamedTextColor.RED, TextDecoration.BOLD),
+                Component.text(SmallText.of("-" + penalty + " pt · dat was niet jouw target"), NamedTextColor.GRAY),
+                Title.Times.times(Duration.ofMillis(100), Duration.ofMillis(1400), Duration.ofMillis(300))
+        ));
+        killer.playSound(killer.getLocation(), Sound.ENTITY_VILLAGER_NO, 1.0f, 0.8f);
+    }
+
     private void awardPoints(Player player, int amount) {
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null) {
-            team.addPoints(amount);
-            dataManager.save();
+            dataManager.addTeamPoints(team, amount);
         }
     }
 
     private void deductPoints(Player player, int amount) {
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null) {
-            team.removePoints(amount);
-            dataManager.save();
+            dataManager.removeTeamPoints(team, amount);
         }
     }
 
@@ -556,16 +651,41 @@ public final class HiddenTargetGame {
     }
 
     private void applyAssignments(Map<UUID, UUID> assignment) {
+        // Targets are assigned (and validated) at start, but stay hidden during the
+        // positioning phase — the compass is only revealed in beginRun().
         for (Map.Entry<UUID, UUID> e : assignment.entrySet()) {
             HiddenTargetPlayerState ps = players.get(e.getKey());
             if (ps != null) {
                 ps.setTargetId(e.getValue());
-                Player hunter = Bukkit.getPlayer(e.getKey());
-                if (hunter != null) {
-                    updateCompassFor(hunter, e.getValue());
-                }
             }
         }
+    }
+
+    private void revealInitialTargets() {
+        for (HiddenTargetPlayerState ps : players.values()) {
+            Player hunter = Bukkit.getPlayer(ps.getUuid());
+            if (hunter == null || ps.getTargetId() == null) continue;
+            updateCompassFor(hunter, ps.getTargetId());
+            hunter.sendMessage(targetMessage("je geheime target: ", ps.getTargetId()));
+        }
+    }
+
+    /** Coloured display name of a target, falling back to a short id when offline. */
+    private Component targetNameComponent(UUID targetId) {
+        Player t = targetId != null ? Bukkit.getPlayer(targetId) : null;
+        String name = t != null ? t.getName()
+                : (targetId != null ? targetId.toString().substring(0, 8) : "?");
+        Team team = targetId != null ? teamManager.getTeamOfPlayer(targetId) : null;
+        return Component.text(name, team != null ? team.getColor() : NamedTextColor.WHITE, TextDecoration.BOLD);
+    }
+
+    /** Chat line announcing a (new) target including its name. */
+    private Component targetMessage(String prefixLabel, UUID targetId) {
+        return Messages.PREFIX.append(Component.text()
+                .append(Component.text(SmallText.of(prefixLabel), NamedTextColor.GREEN))
+                .append(targetNameComponent(targetId))
+                .append(Component.text(SmallText.of(" — volg je kompas!"), NamedTextColor.GREEN))
+                .build());
     }
 
     private Player resolveKiller(Player victim, Player killerFromEvent) {
@@ -603,11 +723,26 @@ public final class HiddenTargetGame {
         Player hunterPlayer = Bukkit.getPlayer(hunterId);
         if (hunterPlayer != null) {
             if (target != null) {
-                hunterPlayer.sendMessage(Messages.success("Nieuwe target — volg je kompas!"));
+                hunterPlayer.sendMessage(targetMessage("nieuwe target: ", target));
                 updateCompassFor(hunterPlayer, target);
             } else {
                 hunterPlayer.sendMessage(Messages.warn("Geen geldige targets meer — wacht op respawns."));
             }
+        }
+    }
+
+    /**
+     * Tries to give a target-less (but living) hunter a new target. Stays silent when
+     * none is available yet, so the per-tick retry doesn't spam the player.
+     */
+    private void retryTargetIfAvailable(HiddenTargetPlayerState hunter) {
+        UUID target = pickRandomTarget(hunter.getUuid(), Set.of());
+        if (target == null) return;
+        hunter.setTargetId(target);
+        Player hunterPlayer = Bukkit.getPlayer(hunter.getUuid());
+        if (hunterPlayer != null) {
+            hunterPlayer.sendMessage(targetMessage("nieuwe target: ", target));
+            updateCompassFor(hunterPlayer, target);
         }
     }
 
@@ -661,7 +796,7 @@ public final class HiddenTargetGame {
 
         List<HiddenTargetPlayerState> ranking = new ArrayList<>(players.values());
         ranking.sort(Comparator.comparingInt(HiddenTargetPlayerState::getTargetKills).reversed()
-                .thenComparingInt(HiddenTargetPlayerState::netScore).reversed());
+                .thenComparing(Comparator.comparingInt(HiddenTargetPlayerState::netScore).reversed()));
 
         HiddenTargetPlayerState top = ranking.isEmpty() ? null : ranking.get(0);
         int topKills = top != null ? top.getTargetKills() : 0;
@@ -687,7 +822,9 @@ public final class HiddenTargetGame {
 
         List<UUID> winnerIds = winners;
         recordHistoryEntry(winnerIds);
-        state = State.STARTING;
+        // ENDING (not STARTING) keeps players frozen during the celebration without the
+        // per-tick dispatcher re-entering beginRun() on the already-elapsed countdown.
+        state = State.ENDING;
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (state != State.IDLE) {
                 cleanupAfterStop();
@@ -699,8 +836,7 @@ public final class HiddenTargetGame {
     private void awardWinBonus(UUID playerId) {
         Team team = teamManager.getTeamOfPlayer(playerId);
         if (team != null) {
-            team.addPoints(WIN_BONUS_POINTS);
-            dataManager.save();
+            dataManager.addTeamPoints(team, WIN_BONUS_POINTS);
         }
         HiddenTargetPlayerState ps = players.get(playerId);
         if (ps != null) {
@@ -764,7 +900,7 @@ public final class HiddenTargetGame {
 
         List<HiddenTargetPlayerState> sorted = new ArrayList<>(players.values());
         sorted.sort(Comparator.comparingInt(HiddenTargetPlayerState::getTargetKills).reversed()
-                .thenComparingInt(HiddenTargetPlayerState::netScore).reversed()
+                .thenComparing(Comparator.comparingInt(HiddenTargetPlayerState::netScore).reversed())
                 .thenComparingInt(HiddenTargetPlayerState::getDeaths));
 
         List<EventHistoryEntry.Placement> placements = new ArrayList<>();
@@ -774,7 +910,7 @@ public final class HiddenTargetGame {
             String name = p != null ? p.getName() : ps.getUuid().toString().substring(0, 8);
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             String detail = ps.getTargetKills() + " kills · " + ps.getHuntedDeaths() + " gejaagd · "
-                    + ps.getDeaths() + " deaths";
+                    + ps.getWrongKills() + " foute · " + ps.getDeaths() + " deaths";
             if (winnerSet.contains(ps.getUuid())) {
                 detail = "winnaar · " + detail;
             }

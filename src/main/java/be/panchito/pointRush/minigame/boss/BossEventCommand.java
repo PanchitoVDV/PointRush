@@ -186,6 +186,9 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "bossevent")) {
+            return;
+        }
         if (game.getState() != BossEventGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Boss Event."));
             return;

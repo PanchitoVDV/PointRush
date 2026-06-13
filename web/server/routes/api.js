@@ -8,6 +8,7 @@ import {
   formatTeam,
 } from '../services/stats.js';
 import { demoLiveStreams, formatLiveStream } from '../services/live.js';
+import { demoLiveEvent, formatLiveEvent } from '../services/liveEvent.js';
 import { demoSchedule, formatSchedule, groupEventsByDay } from '../services/schedule.js';
 
 const router = Router();
@@ -204,6 +205,19 @@ router.get('/live', async (_req, res) => {
   } catch {
     const streams = demoLiveStreams();
     res.json({ streams, count: streams.length, demo: true });
+  }
+});
+
+router.get('/live-event', async (_req, res) => {
+  const db = await getDb();
+  if (!db) {
+    return res.json({ live: demoLiveEvent(), demo: true });
+  }
+  try {
+    const doc = await db.collection(collections().liveEvent).findOne({ _id: 'current' });
+    res.json({ live: formatLiveEvent(doc), demo: false });
+  } catch {
+    res.json({ live: null, demo: true });
   }
 });
 

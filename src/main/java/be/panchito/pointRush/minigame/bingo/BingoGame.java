@@ -41,7 +41,7 @@ import java.util.UUID;
  */
 public final class BingoGame {
 
-    public enum State { IDLE, RUNNING }
+    public enum State { IDLE, STARTING, RUNNING }
 
     public static final int[] TOP_TEAM_POINTS = { 100, 80, 60, 40, 25 };
 
@@ -57,6 +57,8 @@ public final class BingoGame {
     private final Map<UUID, BingoTeamProgress> teamProgress = new LinkedHashMap<>();
     private final Set<UUID> participants = new HashSet<>();
     private final Map<UUID, Inventory> openGuis = new HashMap<>();
+    /** Locatie waar elke deelnemer stond vóór de start, om na afloop terug te teleporteren. */
+    private final Map<UUID, Location> savedLocations = new HashMap<>();
 
     private long eventStartedAtMs = 0L;
     private long runEndsAtMs = 0L;
@@ -68,6 +70,8 @@ public final class BingoGame {
     private final Map<UUID, Integer> awardedPoints = new HashMap<>();
 
     private BukkitTask tickTask;
+    /** Fallback-timer die het event toch start mocht een teleport-callback uitblijven. */
+    private BukkitTask startGuardTask;
 
     public BingoGame(PointRush plugin, BingoConfig config) {
         this.plugin = plugin;
@@ -142,10 +146,12 @@ public final class BingoGame {
         teamProgress.clear();
         participants.clear();
         openGuis.clear();
+        savedLocations.clear();
         finishedBuckets.clear();
         awardedPoints.clear();
         historyRecorded = false;
 
+        List<Player> eligible = new ArrayList<>();
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.getGameMode() == GameMode.CREATIVE || online.getGameMode() == GameMode.SPECTATOR) {
                 continue;
@@ -153,13 +159,55 @@ public final class BingoGame {
             if (!LobbyWorld.contains(plugin, online)) {
                 continue;
             }
-            joinPlayer(online);
+            eligible.add(online);
         }
 
-        if (participants.isEmpty()) {
+        if (eligible.isEmpty()) {
             Bukkit.broadcast(Messages.error("Bingo heeft minstens 1 speler nodig."));
             sharedCardTiles = new Material[0];
             return false;
+        }
+
+        // Fase 1: iedereen eerst (async, cross-world) naar de bingo-wereld teleporteren. Pas wanneer
+        // ze er allemaal zijn vangt fase 2 (beginEvent) aan — zo wordt het basisaantal opgenomen in de
+        // bingo-wereld en telt loot van vóór het event niet mee.
+        state = State.STARTING;
+        int[] pending = { eligible.size() };
+        for (Player player : eligible) {
+            admit(player, () -> {
+                if (--pending[0] <= 0) {
+                    beginEvent();
+                }
+            });
+        }
+        // Veiligheidsnet: mocht een teleport-callback uitblijven, start het event toch.
+        startGuardTask = Bukkit.getScheduler().runTaskLater(plugin, this::beginEvent, 100L);
+        return true;
+    }
+
+    /**
+     * Fase 2: alle spelers zijn in de bingo-wereld; nu pas begint het event en het tellen. Idempotent
+     * via de {@link State#STARTING}-check, want zowel de teleport-latch als de fallback kan dit triggeren.
+     */
+    private void beginEvent() {
+        if (state != State.STARTING) {
+            return;
+        }
+        cancelTask(startGuardTask);
+        startGuardTask = null;
+
+        boolean anyOnline = false;
+        for (UUID id : participants) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) {
+                anyOnline = true;
+                break;
+            }
+        }
+        if (!anyOnline) {
+            Bukkit.broadcast(Messages.error("Bingo afgebroken: geen spelers meer aanwezig."));
+            cleanup();
+            return;
         }
 
         state = State.RUNNING;
@@ -172,22 +220,71 @@ public final class BingoGame {
 
         tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
         MinigameStartEffects.onStarted(plugin);
-        return true;
     }
 
     public boolean stop() {
         if (state == State.IDLE) return false;
+        if (state == State.STARTING) {
+            // Start was nog bezig (spelers aan het teleporteren): netjes afbreken.
+            cleanup();
+            Bukkit.broadcast(Messages.info("Bingo geannuleerd tijdens de start."));
+            return true;
+        }
         endEvent(true);
         return true;
     }
 
-    private void joinPlayer(Player player) {
+    /**
+     * Laat een speler toe tot het event: registreer + teleporteer naar de bingo-wereld. Het basisaantal
+     * en de kaart worden pas in {@link #onPlayerArrived} (ná de teleport) toegekend. {@code afterArrival}
+     * draait nadat de speler is aangekomen (gebruikt door de start-latch).
+     */
+    private void admit(Player player, Runnable afterArrival) {
         participants.add(player.getUniqueId());
+        savedLocations.put(player.getUniqueId(), player.getLocation().clone());
         UUID bucket = bucketFor(player.getUniqueId());
-        teamProgress.computeIfAbsent(bucket, id ->
-                new BingoTeamProgress(id, bucketLabel(id)));
+        teamProgress.computeIfAbsent(bucket, id -> new BingoTeamProgress(id, bucketLabel(id)));
+
+        Runnable onArrive = () -> {
+            onPlayerArrived(player);
+            if (afterArrival != null) {
+                afterArrival.run();
+            }
+        };
+
+        Location spawn = config.getSpawn();
+        if (spawn != null && spawn.getWorld() != null) {
+            plugin.getTeleporter().teleport(player, spawn, false, onArrive);
+        } else {
+            onArrive.run();
+        }
+    }
+
+    /**
+     * Afgehandeld zodra de speler in de bingo-wereld is aangekomen: leg het basisaantal vast (zodat
+     * bestaande loot niet meetelt), geef de kaart en koppel het scorebord. Bij een laat-toegetreden
+     * speler tijdens een lopend event wordt meteen gesynchroniseerd.
+     */
+    private void onPlayerArrived(Player player) {
+        if (!player.isOnline() || !participants.contains(player.getUniqueId())) {
+            return;
+        }
+        // Begin met een lege inventory zodat er geen items van een vorig event achterblijven. Veilig:
+        // de bingo-wereld heeft een eigen Multiverse-Inventories-profiel, dus dit raakt survival niet.
+        // Draait ná de teleport (onArrive), dus ná de per-wereld inventory-swap. De baseline wordt
+        // hierna op een schone inventory vastgelegd.
+        player.getInventory().clear();
+
+        UUID bucket = bucketFor(player.getUniqueId());
+        BingoTeamProgress progress = teamProgress.get(bucket);
+        if (progress != null) {
+            progress.addBaseline(player);
+        }
         giveMap(player);
         scoreboard.attach(player);
+        if (state == State.RUNNING) {
+            syncTeam(bucket);
+        }
     }
 
     private void giveMap(Player player) {
@@ -195,6 +292,29 @@ public final class BingoGame {
         Map<Integer, ItemStack> leftover = player.getInventory().addItem(map);
         if (!leftover.isEmpty()) {
             player.getWorld().dropItemNaturally(player.getLocation(), map);
+        }
+    }
+
+    /** True als de speler al een bingo-kaart in zijn inventory heeft. */
+    private boolean hasBingoMap(Player player) {
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (BingoItems.isBingoMap(plugin, item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Geeft de speler zijn bingo-kaart terug als die ontbreekt — bv. na dood/respawn. Doet niets als
+     * er geen event loopt, de speler niet meedoet of hij de kaart nog heeft (geen duplicaten).
+     */
+    public void giveMapIfMissing(Player player) {
+        if (state != State.RUNNING || !participants.contains(player.getUniqueId())) {
+            return;
+        }
+        if (!hasBingoMap(player)) {
+            giveMap(player);
         }
     }
 
@@ -307,8 +427,7 @@ public final class BingoGame {
                 pts += TOP_TEAM_POINTS[placementIndex];
             }
             if (pts > 0) {
-                team.addPoints(pts);
-                dataManager.save();
+                dataManager.addTeamPoints(team, pts);
             }
         }
         awardedPoints.put(bucketId, pts);
@@ -338,27 +457,29 @@ public final class BingoGame {
     }
 
     /**
-     * Teleporteert de teamleden naar de bingo-spawn (andere wereld → nieuwe Multiverse inventory)
-     * en haalt ze uit het lopende event. De voortgang blijft bewaard voor de eindstand/history.
+     * Brengt de teamleden terug naar hun opgeslagen startlocatie (de lobby) en haalt ze uit het
+     * lopende event. De voortgang blijft bewaard voor de eindstand/history.
      */
     private void finishAndTeleportTeam(UUID bucketId) {
-        Location spawn = config.getSpawn();
-        if (spawn == null || spawn.getWorld() == null) {
-            plugin.getLogger().warning("Bingo: geen (geldige) spawn ingesteld; team "
-                    + bucketLabel(bucketId) + " wordt niet geteleporteerd. Gebruik /bingo setspawn.");
-        }
         for (Player member : onlineMembers(bucketId)) {
             Inventory open = openGuis.get(member.getUniqueId());
             if (open != null && member.getOpenInventory().getTopInventory().equals(open)) {
                 member.closeInventory();
             }
-            if (spawn != null && spawn.getWorld() != null) {
-                try {
-                    plugin.getTeleporter().teleport(member, spawn);
-                } catch (Exception ignored) {
-                }
-            }
-            removeParticipant(member);
+            removeParticipant(member, true);
+        }
+    }
+
+    /** Teleporteert {@code player} terug naar de locatie waar hij stond vóór de bingo-start. */
+    private void returnToSaved(Player player) {
+        Location saved = savedLocations.get(player.getUniqueId());
+        if (saved == null || saved.getWorld() == null) {
+            return;
+        }
+        try {
+            plugin.getTeleporter().teleport(player, saved);
+            player.setFallDistance(0f);
+        } catch (Exception ignored) {
         }
     }
 
@@ -393,7 +514,6 @@ public final class BingoGame {
 
     private void awardRemaining(List<Map.Entry<UUID, BingoTeamProgress>> remaining) {
         int placed = finishedBuckets.size();
-        boolean changed = false;
         for (Map.Entry<UUID, BingoTeamProgress> entry : remaining) {
             if (placed >= TOP_TEAM_POINTS.length) break;
             if (entry.getValue().countFound() <= 0) break;
@@ -402,17 +522,13 @@ public final class BingoGame {
             if (team == null) continue;
 
             int pts = TOP_TEAM_POINTS[placed];
-            team.addPoints(pts);
+            dataManager.addTeamPoints(team, pts);
             awardedPoints.put(entry.getKey(), pts);
             placed++;
-            changed = true;
 
             Bukkit.broadcast(Messages.info("Top " + placed + ": team "
                     + team.getName() + " · " + entry.getValue().countFound()
                     + " vakken · +" + pts + " pts"));
-        }
-        if (changed) {
-            dataManager.save();
         }
     }
 
@@ -459,11 +575,14 @@ public final class BingoGame {
         state = State.IDLE;
         cancelTask(tickTask);
         tickTask = null;
+        cancelTask(startGuardTask);
+        startGuardTask = null;
         scoreboard.stop();
 
         for (UUID id : new ArrayList<>(participants)) {
             Player p = Bukkit.getPlayer(id);
             if (p != null) {
+                returnToSaved(p);
                 removeBingoMaps(p);
                 scoreboard.detach(p);
             }
@@ -480,6 +599,7 @@ public final class BingoGame {
         participants.clear();
         teamProgress.clear();
         openGuis.clear();
+        savedLocations.clear();
         sharedCardTiles = new Material[0];
     }
 
@@ -493,7 +613,19 @@ public final class BingoGame {
     }
 
     public void removeParticipant(Player player) {
+        removeParticipant(player, false);
+    }
+
+    /**
+     * Haalt {@code player} uit het event. Met {@code returnToLobby} wordt hij eerst teruggeteleporteerd
+     * naar zijn opgeslagen startlocatie; bij een server-quit hoeft dat niet (speler is offline).
+     */
+    public void removeParticipant(Player player, boolean returnToLobby) {
+        if (returnToLobby) {
+            returnToSaved(player);
+        }
         participants.remove(player.getUniqueId());
+        savedLocations.remove(player.getUniqueId());
         untrackOpenGui(player.getUniqueId());
         removeBingoMaps(player);
         scoreboard.detach(player);
@@ -511,8 +643,8 @@ public final class BingoGame {
         if (finishedBuckets.contains(bucketFor(player.getUniqueId()))) {
             return;
         }
-        joinPlayer(player);
-        syncTeam(bucketFor(player.getUniqueId()));
+        // admit() teleporteert en synct ná aankomst (onPlayerArrived).
+        admit(player, null);
     }
 
     private void cancelTask(BukkitTask task) {

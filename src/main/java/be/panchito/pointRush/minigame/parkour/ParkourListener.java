@@ -17,6 +17,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
@@ -179,7 +180,7 @@ public final class ParkourListener implements Listener {
         event.setCancelled(true);
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
             player.setFallDistance(0f);
-            game.teleportToCheckpoint(player);
+            game.rescueToCheckpoint(player);
         }
     }
 
@@ -196,6 +197,16 @@ public final class ParkourListener implements Listener {
         Player player = event.getPlayer();
         if (game.isParticipant(player.getUniqueId())) {
             game.removeParticipant(player, false);
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        // Veiligheidsnet: ruim achtergebleven parkour-items op na een abnormale exit (crash/disconnect
+        // tijdens een event). Deelnemers raken we niet aan.
+        if (!game.isParticipant(player.getUniqueId())) {
+            game.stripParkourItems(player);
         }
     }
 }

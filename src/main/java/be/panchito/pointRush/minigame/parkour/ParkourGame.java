@@ -63,10 +63,11 @@ public final class ParkourGame {
     public static final int[] PLACEMENT_POINTS = { 100, 80, 60, 50, 40, 30, 25, 20, 15, 10 };
 
     public static final int COUNTDOWN_SECONDS = 10;
-    /** Hard cap so an event never hangs forever (10 minutes). */
-    public static final long EVENT_TIMEOUT_TICKS = 10L * 60L * 20L;
     /** Squared distance at which a player is considered to have touched a checkpoint/finish. */
     public static final double TOUCH_RADIUS_SQ = 4.0;
+
+    /** Cooldown (ms) tussen twee keren hetzelfde parkour-item gebruiken of terug naar een checkpoint gaan. */
+    public static final long ITEM_COOLDOWN_MS = 3000L;
 
     public static final String ITEM_CHECKPOINT = "checkpoint";
     public static final String ITEM_VISIBILITY = "visibility";
@@ -267,19 +268,27 @@ public final class ParkourGame {
         player.setFoodLevel(20);
         player.setFireTicks(0);
         player.setFallDistance(0f);
+        scoreboard.attach(player);
+        player.sendMessage(Messages.info("Parkour event start binnenkort. Maak je klaar!"));
 
         Location spawn = config.getSpawn();
         if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
+            // Items pas ná de (mogelijk async, cross-world) teleport uitdelen — anders wist een
+            // per-wereld inventory-swap (Multiverse-Inventories) ze meteen weer. Zie BingoGame#admit.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    giveItems(player);
+                }
+            });
+        } else {
+            giveItems(player);
         }
-        giveItems(player);
-        scoreboard.attach(player);
-
-        player.sendMessage(Messages.info("Parkour event start binnenkort. Maak je klaar!"));
     }
 
     private void giveItems(Player player) {
         PlayerInventory inv = player.getInventory();
+        // Begin met een lege inventory zodat er geen items van een vorig event achterblijven.
+        inv.clear();
         inv.setItem(0, createItem(Material.FEATHER, "Laatste checkpoint", ITEM_CHECKPOINT,
                 "Rechtermuisklik om naar je laatste checkpoint te gaan."));
         inv.setItem(8, createItem(Material.ENDER_EYE, visibilityLabel(ParkourPlayerState.VisibilityMode.ALL), ITEM_VISIBILITY,
@@ -329,7 +338,8 @@ public final class ParkourGame {
     private void beginRace() {
         state = State.RUNNING;
         scoreboard.markRaceStart();
-        int dur = (int) Math.min((long) Integer.MAX_VALUE / 16, EVENT_TIMEOUT_TICKS);
+        long durationTicks = config.getDurationTicks();
+        int dur = (int) Math.min((long) Integer.MAX_VALUE / 16, durationTicks);
         for (UUID id : players.keySet()) {
             Player p = Bukkit.getPlayer(id);
             ParkourPlayerState ps = players.get(id);
@@ -341,7 +351,7 @@ public final class ParkourGame {
                     p.addPotionEffect(new PotionEffect(PotionEffectType.JUMP_BOOST, dur, 0, false, false, true));
                 }
                 if (ps.hasShopParkourCloud()) {
-                    p.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 240, 0, false, false, true));
+                    p.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, dur, 0, false, false, true));
                 }
                 p.showTitle(Title.title(
                         MinigameText.goTitle(),
@@ -350,7 +360,7 @@ public final class ParkourGame {
             }
         }
         playSoundAll(Sound.ENTITY_ENDER_DRAGON_GROWL, 0.6f, 1.6f);
-        timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, EVENT_TIMEOUT_TICKS);
+        timeoutTask = Bukkit.getScheduler().runTaskLater(plugin, this::stop, durationTicks);
     }
 
     public void onCheckpointReached(Player player, int index) {
@@ -373,8 +383,7 @@ public final class ParkourGame {
         int points = placement <= PLACEMENT_POINTS.length ? PLACEMENT_POINTS[placement - 1] : 0;
         Team team = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (team != null && points > 0) {
-            team.addPoints(points);
-            dataManager.save();
+            dataManager.addTeamPoints(team, points);
         }
 
         Component prefix = Messages.PREFIX;
@@ -411,9 +420,32 @@ public final class ParkourGame {
         }
     }
 
+    /** Handmatige checkpoint-terugkeer via de feather. Respecteert de 3s item-cooldown. */
     public void teleportToCheckpoint(Player player) {
         ParkourPlayerState ps = players.get(player.getUniqueId());
         if (ps == null || ps.isFinished()) return;
+        long now = System.currentTimeMillis();
+        if (ps.isOnCooldown(ITEM_CHECKPOINT, now)) {
+            notifyCooldown(player, ps, ITEM_CHECKPOINT, now);
+            return;
+        }
+        if (returnToLastCheckpoint(player, ps)) {
+            ps.startCooldown(ITEM_CHECKPOINT, now, ITEM_COOLDOWN_MS);
+        }
+    }
+
+    /**
+     * Directe terugkeer zonder cooldown — voor de void-redding, zodat een speler die in de leegte valt
+     * altijd gered wordt, ook al staat de feather nog op cooldown.
+     */
+    public void rescueToCheckpoint(Player player) {
+        ParkourPlayerState ps = players.get(player.getUniqueId());
+        if (ps == null || ps.isFinished()) return;
+        returnToLastCheckpoint(player, ps);
+    }
+
+    /** Voert de eigenlijke teleport naar de laatste checkpoint (of spawn) uit. Retourneert false als er geen doel is. */
+    private boolean returnToLastCheckpoint(Player player, ParkourPlayerState ps) {
         Location target;
         int idx = ps.getCheckpointIndex();
         if (idx >= 0 && idx < config.getCheckpoints().size()) {
@@ -421,17 +453,31 @@ public final class ParkourGame {
         } else {
             target = config.getSpawn();
         }
-        if (target == null) return;
+        if (target == null) return false;
         player.setFallDistance(0f);
         player.setFireTicks(0);
-        player.teleport(target);
+        plugin.getTeleporter().teleport(player, target);
         player.sendActionBar(Messages.info("Terug naar checkpoint."));
         player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.8f, 1.2f);
+        return true;
+    }
+
+    /** Laat de speler weten hoeveel cooldown er nog rest voor dit item. */
+    private void notifyCooldown(Player player, ParkourPlayerState ps, String key, long now) {
+        long secs = Math.max(1L, (ps.cooldownRemainingMs(key, now) + 999L) / 1000L);
+        player.sendActionBar(Messages.warn("Nog " + secs + "s cooldown."));
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.6f, 0.7f);
     }
 
     public void cycleVisibility(Player player) {
         ParkourPlayerState ps = players.get(player.getUniqueId());
         if (ps == null) return;
+        long now = System.currentTimeMillis();
+        if (ps.isOnCooldown(ITEM_VISIBILITY, now)) {
+            notifyCooldown(player, ps, ITEM_VISIBILITY, now);
+            return;
+        }
+        ps.startCooldown(ITEM_VISIBILITY, now, ITEM_COOLDOWN_MS);
         ParkourPlayerState.VisibilityMode next = switch (ps.getVisibilityMode()) {
             case ALL -> ParkourPlayerState.VisibilityMode.TEAM;
             case TEAM -> ParkourPlayerState.VisibilityMode.NONE;
@@ -495,6 +541,9 @@ public final class ParkourGame {
 
     private void restorePlayer(Player player, ParkourPlayerState ps, boolean teleport) {
         PlayerRespawnUtil.prepareForRestore(player);
+        // Ruim onze items altijd op — ook bij een quit (teleport=false) zodat er niets achterblijft,
+        // los van of Multiverse-Inventories per wereld inventories beheert.
+        stripParkourItems(player);
 
         for (Player other : Bukkit.getOnlinePlayers()) {
             player.showPlayer(plugin, other);
@@ -517,13 +566,28 @@ public final class ParkourGame {
 
         Location target = ps.getSavedLocation();
         try {
-            player.teleport(target);
+            // Veilige (Multiverse-aware) teleport: een rauwe sync-teleport over werelden heen wordt
+            // door Multiverse soms genegeerd, waardoor spelers in de parkour-wereld blijven hangen.
+            plugin.getTeleporter().teleport(player, target);
             player.setFallDistance(0f);
             player.sendActionBar(Messages.info("Terug naar je startlocatie."));
             player.playSound(target, Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.0f);
         } catch (Exception ex) {
             plugin.getLogger().warning("Kon speler " + player.getName()
                     + " niet terugteleporteren: " + ex.getMessage());
+        }
+    }
+
+    /** Verwijdert alle parkour-tools en gadget-items uit de inventory (cleanup, ook na abnormale exit). */
+    public void stripParkourItems(Player player) {
+        PlayerInventory inv = player.getInventory();
+        ItemStack[] contents = inv.getContents();
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack item = contents[i];
+            if (item == null) continue;
+            if (getItemTag(item) != null || MinigameGadgetItems.parse(plugin, item) != null) {
+                inv.setItem(i, null);
+            }
         }
     }
 

@@ -18,6 +18,10 @@ import java.util.logging.Level;
  */
 public final class ParkourConfig {
 
+    public static final int DEFAULT_DURATION_MINUTES = 10;
+    public static final int MIN_DURATION_MINUTES = 1;
+    public static final int MAX_DURATION_MINUTES = 60;
+
     private static final String KEY = "parkour";
 
     private final JavaPlugin plugin;
@@ -26,6 +30,7 @@ public final class ParkourConfig {
     private Location spawn;
     private Location finish;
     private final List<Location> checkpoints = new ArrayList<>();
+    private int durationMinutes = DEFAULT_DURATION_MINUTES;
 
     public ParkourConfig(JavaPlugin plugin, UnifiedSettings unified) {
         this.plugin = plugin;
@@ -36,6 +41,7 @@ public final class ParkourConfig {
         spawn = null;
         finish = null;
         checkpoints.clear();
+        durationMinutes = DEFAULT_DURATION_MINUTES;
         YamlConfiguration cfg = unified.yaml();
         ConfigurationSection root = cfg.getConfigurationSection(KEY);
         if (root == null) {
@@ -43,6 +49,9 @@ public final class ParkourConfig {
         }
         this.spawn = loadLocation(cfg, KEY + ".spawn");
         this.finish = loadLocation(cfg, KEY + ".finish");
+        if (cfg.isSet(KEY + ".durationMinutes")) {
+            durationMinutes = clampMinutes(cfg.getInt(KEY + ".durationMinutes"));
+        }
         ConfigurationSection cps = cfg.getConfigurationSection(KEY + ".checkpoints");
         if (cps != null) {
             List<String> keys = new ArrayList<>(cps.getKeys(false));
@@ -67,6 +76,7 @@ public final class ParkourConfig {
         cfg.set(KEY, null);
         if (spawn != null) saveLocation(cfg, KEY + ".spawn", spawn);
         if (finish != null) saveLocation(cfg, KEY + ".finish", finish);
+        cfg.set(KEY + ".durationMinutes", durationMinutes);
         for (int i = 0; i < checkpoints.size(); i++) {
             saveLocation(cfg, KEY + ".checkpoints." + (i + 1), checkpoints.get(i));
         }
@@ -137,6 +147,29 @@ public final class ParkourConfig {
     public void setFinish(Location finish) {
         this.finish = finish;
         save();
+    }
+
+    public int getDurationMinutes() {
+        return durationMinutes;
+    }
+
+    public void setDurationMinutes(int minutes) {
+        this.durationMinutes = clampMinutes(minutes);
+        save();
+    }
+
+    /** Eventduur in milliseconden. */
+    public long getDurationMs() {
+        return durationMinutes * 60L * 1000L;
+    }
+
+    /** Eventduur in server-ticks (voor de timeout-scheduler). */
+    public long getDurationTicks() {
+        return durationMinutes * 60L * 20L;
+    }
+
+    private static int clampMinutes(int minutes) {
+        return Math.max(MIN_DURATION_MINUTES, Math.min(MAX_DURATION_MINUTES, minutes));
     }
 
     public boolean isReady() {

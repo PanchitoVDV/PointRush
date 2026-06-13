@@ -121,6 +121,9 @@ public final class TntRunCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "tntrun")) {
+            return;
+        }
         if (game.getState() != TntRunGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een TNT Run event."));
             return;

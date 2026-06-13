@@ -9,6 +9,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 /**
  * Gold Rush: tel gouderts, blokkeer goud-blokken plaatsen tegen cheat.
@@ -19,6 +20,11 @@ public final class GoldRushListener implements Listener {
 
     public GoldRushListener(GoldRushGame game) {
         this.game = game;
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        game.onParticipantJoin(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)

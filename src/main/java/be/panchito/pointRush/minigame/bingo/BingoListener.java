@@ -1,5 +1,6 @@
 package be.panchito.pointRush.minigame.bingo;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -7,6 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -15,6 +17,7 @@ import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 
 /**
@@ -131,6 +134,22 @@ public final class BingoListener implements Listener {
         player.setFireTicks(0);
         player.setFallDistance(0f);
         player.setRemainingAir(player.getMaximumAir());
+    }
+
+    @EventHandler
+    public void onDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        // Laat de bingo-kaart niet droppen bij dood; we geven hem bij respawn opnieuw.
+        event.getDrops().removeIf(item -> BingoItems.isBingoMap(game.getPlugin(), item));
+    }
+
+    @EventHandler
+    public void onRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (!game.isParticipant(player.getUniqueId())) return;
+        // Eén tick later, zodat de respawn-inventory al toegepast is.
+        Bukkit.getScheduler().runTask(game.getPlugin(), () -> game.giveMapIfMissing(player));
     }
 
     @EventHandler

@@ -43,9 +43,12 @@ public final class HoldTheCrownListener implements Listener {
         event.setDeathMessage(null);
         event.setDroppedExp(0);
 
+        // Killer nu vastleggen (na respawn is getKiller() niet meer betrouwbaar) zodat de kroon
+        // naar de speler gaat die de drager doodt i.p.v. te droppen.
+        Player killer = player.getKiller();
         game.getPlugin().getServer().getScheduler().runTask(game.getPlugin(), () -> {
             if (player.isOnline()) {
-                game.handleDeath(player);
+                game.handleDeath(player, killer);
             }
         });
     }

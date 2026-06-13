@@ -264,11 +264,6 @@ public final class HoldTheCrownGame {
         clearPotionEffects(player);
         player.setGlowing(false);
 
-        Location spawn = config.getSpawn(ps.getSide());
-        if (spawn != null) {
-            plugin.getTeleporter().teleport(player, spawn);
-        }
-        giveKit(player, ps.getSide());
         scoreboard.attach(player);
         Team prTeam = teamManager.getTeamOfPlayer(player.getUniqueId());
         if (prTeam != null) {
@@ -277,6 +272,19 @@ public final class HoldTheCrownGame {
         }
         player.sendMessage(Messages.info("Je zit in team "
                 + ps.getSide().getDisplayName() + " — pak de kroon in het midden!"));
+
+        Location spawn = config.getSpawn(ps.getSide());
+        if (spawn != null) {
+            // Kit pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
+            // inventory-swap (Multiverse-Inventories) 'm meteen weer. Zie ParkourGame#joinPlayer.
+            plugin.getTeleporter().teleport(player, spawn, false, () -> {
+                if (player.isOnline() && players.containsKey(player.getUniqueId())) {
+                    giveKit(player, ps.getSide());
+                }
+            });
+        } else {
+            giveKit(player, ps.getSide());
+        }
     }
 
     public void giveKit(Player player, CtfSide side) {
@@ -359,6 +367,16 @@ public final class HoldTheCrownGame {
         crownCarrier = null;
         crownAtCenter = true;
         crownProgressMs = 0L;
+
+        // Authoritative equip: the async start teleport (lobby → arena) and any per-world
+        // Multiverse-Inventories swap have settled by now (after the countdown), so re-hand
+        // the kit to guarantee nobody enters the round stripped of their diamond kit.
+        for (HoldTheCrownPlayerState ps : players.values()) {
+            Player p = Bukkit.getPlayer(ps.getUuid());
+            if (p != null) {
+                giveKit(p, ps.getSide());
+            }
+        }
 
         spawnCenterMarker();
         broadcastTitle(
@@ -494,6 +512,24 @@ public final class HoldTheCrownGame {
             loc.getWorld().dropItemNaturally(loc.clone().add(0, 0.5, 0), CrownItem.create());
             loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.8f, 0.6f);
         }
+    }
+
+    /**
+     * Geeft de kroon direct aan de killer i.p.v. te droppen. Returnt false als er geen geldige killer
+     * is (omgevingsdood, of killer offline/dood/niet in survival/zichzelf) — dan dropt de kroon normaal.
+     */
+    private boolean tryTransferCrownToKiller(Player killer, Player victim) {
+        if (killer == null || !killer.isOnline()) return false;
+        if (killer.getUniqueId().equals(victim.getUniqueId())) return false;
+        HoldTheCrownPlayerState killerState = players.get(killer.getUniqueId());
+        if (killerState == null || !killerState.isAlive()) return false;
+        if (killer.getGameMode() != GameMode.SURVIVAL) return false;
+
+        long now = System.currentTimeMillis();
+        stripCrown(now);                          // haalt de kroon van de gevallen drager (hold-tijd telt door)
+        tryEquipCrown(killer, killerState, now);  // zet hem direct op de killer
+        killer.getWorld().playSound(killer.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.7f, 1.4f);
+        return true;
     }
 
     private void updateCrownScoring(long deltaMs, long now) {
@@ -690,13 +726,16 @@ public final class HoldTheCrownGame {
         }
     }
 
-    public void handleDeath(Player player) {
+    public void handleDeath(Player player, Player killer) {
         if (state != State.RUNNING && state != State.STARTING) return;
         HoldTheCrownPlayerState ps = players.get(player.getUniqueId());
         if (ps == null || !ps.isAlive()) return;
 
         if (crownCarrier != null && crownCarrier.equals(player.getUniqueId())) {
-            dropCrownAt(player.getLocation());
+            // Geef de kroon aan de killer; alleen bij omgevingsdood of een ongeldige killer dropt hij.
+            if (!tryTransferCrownToKiller(killer, player)) {
+                dropCrownAt(player.getLocation());
+            }
         }
 
         ps.setAlive(false);
@@ -770,14 +809,12 @@ public final class HoldTheCrownGame {
             return;
         }
 
-        boolean awarded = false;
         for (HoldTheCrownPlayerState ps : players.values()) {
             if (ps.getSide() != winningSide) continue;
             ps.setPlacement(1);
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             if (team != null) {
-                team.addPoints(WIN_TEAM_POINTS);
-                awarded = true;
+                dataManager.addTeamPoints(team, WIN_TEAM_POINTS);
             }
             Player p = Bukkit.getPlayer(ps.getUuid());
             if (p != null) {
@@ -785,9 +822,6 @@ public final class HoldTheCrownGame {
                         + " heeft gewonnen! +" + WIN_TEAM_POINTS + " punten"
                         + (team != null ? " voor team " + team.getName() : "") + "."));
             }
-        }
-        if (awarded) {
-            dataManager.save();
         }
     }
 

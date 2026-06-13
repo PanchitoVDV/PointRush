@@ -1,7 +1,6 @@
 package be.panchito.pointRush.commands;
 
 import be.panchito.pointRush.PointRush;
-import be.panchito.pointRush.minigame.MinigameRegistry;
 import be.panchito.pointRush.storage.DataManager;
 import be.panchito.pointRush.team.Team;
 import be.panchito.pointRush.team.TeamManager;
@@ -230,12 +229,13 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
         teamManager.removeMember(team, player.getUniqueId());
         if (team.size() == 0) {
             teamManager.disbandTeam(team);
+            dataManager.deleteTeam(team.getId());
             player.sendMessage(Messages.info("Team opgeheven."));
         } else {
             broadcastToTeam(team, Messages.warn(player.getName() + " heeft het team verlaten."));
             player.sendMessage(Messages.info("Je hebt het team verlaten."));
+            dataManager.save();
         }
-        dataManager.save();
     }
 
     private void handleKick(Player player, String[] args) {
@@ -334,7 +334,7 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
         }
         broadcastToTeam(team, Messages.warn("Het team is opgeheven door " + player.getName() + "."));
         teamManager.disbandTeam(team);
-        dataManager.save();
+        dataManager.deleteTeam(team.getId());
     }
 
     private void handleColor(Player player, String[] args) {
@@ -365,7 +365,7 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleSetHome(Player player) {
-        if (MinigameRegistry.anyActive(plugin)) {
+        if (plugin.isEventLiveNow()) {
             player.sendMessage(Messages.error("Je kan /team sethome niet gebruiken tijdens een event."));
             return;
         }
@@ -385,7 +385,7 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleHome(Player player) {
-        if (MinigameRegistry.anyActive(plugin)) {
+        if (plugin.isEventLiveNow()) {
             player.sendMessage(Messages.error("Je kan /team home niet gebruiken tijdens een event."));
             return;
         }
@@ -422,7 +422,7 @@ public final class TeamCommand implements CommandExecutor, TabCompleter {
                     cancelWarmup(id);
                     return;
                 }
-                if (MinigameRegistry.anyActive(plugin)) {
+                if (plugin.isEventLiveNow()) {
                     p.sendMessage(Messages.error("Teleport geannuleerd: er is een event gestart."));
                     p.sendActionBar(Component.text(SmallText.of("teleport geannuleerd"), NamedTextColor.RED));
                     cancelWarmup(id);

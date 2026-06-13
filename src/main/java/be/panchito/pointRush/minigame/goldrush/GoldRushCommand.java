@@ -126,6 +126,9 @@ public final class GoldRushCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "goldrush")) {
+            return;
+        }
         if (game.getState() != GoldRushGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een Gold Rush."));
             return;

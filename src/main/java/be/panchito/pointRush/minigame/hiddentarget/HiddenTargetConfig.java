@@ -9,6 +9,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Level;
 
 /**
@@ -19,14 +23,15 @@ public final class HiddenTargetConfig {
     public static final int DEFAULT_DURATION_MINUTES = 10;
     public static final int DEFAULT_KILL_POINTS = 1;
     public static final int DEFAULT_HUNTED_PENALTY = 1;
-    public static final int DEFAULT_RESPAWN_SECONDS = 5;
+    public static final int DEFAULT_RESPAWN_SECONDS = 60;
 
     private static final String KEY = "hiddentarget";
 
     private final JavaPlugin plugin;
     private final UnifiedSettings unified;
 
-    private Location spawn;
+    /** Eén of meer start/respawn-spawns; spelers worden hierover verdeeld. */
+    private final List<Location> spawns = new ArrayList<>();
     private Location regionMin;
     private Location regionMax;
     private int durationMinutes = DEFAULT_DURATION_MINUTES;
@@ -40,7 +45,7 @@ public final class HiddenTargetConfig {
     }
 
     public void load() {
-        spawn = null;
+        spawns.clear();
         regionMin = null;
         regionMax = null;
         durationMinutes = DEFAULT_DURATION_MINUTES;
@@ -52,7 +57,7 @@ public final class HiddenTargetConfig {
         if (cfg.getConfigurationSection(KEY) == null) {
             return;
         }
-        this.spawn = loadLocation(cfg, KEY + ".spawn");
+        loadSpawns(cfg);
         Location a = loadLocation(cfg, KEY + ".region.a");
         Location b = loadLocation(cfg, KEY + ".region.b");
         if (a != null && b != null) {
@@ -75,7 +80,9 @@ public final class HiddenTargetConfig {
     public void save() {
         YamlConfiguration cfg = unified.yaml();
         cfg.set(KEY, null);
-        if (spawn != null) saveLocation(cfg, KEY + ".spawn", spawn);
+        for (int i = 0; i < spawns.size(); i++) {
+            saveLocation(cfg, KEY + ".spawns." + i, spawns.get(i));
+        }
         if (regionMin != null) saveLocation(cfg, KEY + ".region.a", regionMin);
         if (regionMax != null) saveLocation(cfg, KEY + ".region.b", regionMax);
         cfg.set(KEY + ".durationMinutes", durationMinutes);
@@ -84,10 +91,29 @@ public final class HiddenTargetConfig {
         cfg.set(KEY + ".respawnSeconds", respawnSeconds);
         try {
             unified.save();
-            plugin.getLogger().info("settings.yml opgeslagen (" + KEY + ": spawn=" + (spawn != null)
+            plugin.getLogger().info("settings.yml opgeslagen (" + KEY + ": spawns=" + spawns.size()
                     + ", region=" + (regionMin != null && regionMax != null) + ").");
         } catch (IOException ex) {
             plugin.getLogger().log(Level.SEVERE, "Kon settings.yml niet opslaan!", ex);
+        }
+    }
+
+    private void loadSpawns(YamlConfiguration cfg) {
+        ConfigurationSection sec = cfg.getConfigurationSection(KEY + ".spawns");
+        if (sec != null) {
+            for (String key : sec.getKeys(false)) {
+                Location loc = loadLocation(cfg, KEY + ".spawns." + key);
+                if (loc != null) {
+                    spawns.add(loc);
+                }
+            }
+        }
+        // Migratie: oude config met één enkele 'spawn' wordt het eerste spawnpunt.
+        if (spawns.isEmpty()) {
+            Location legacy = loadLocation(cfg, KEY + ".spawn");
+            if (legacy != null) {
+                spawns.add(legacy);
+            }
         }
     }
 
@@ -134,13 +160,60 @@ public final class HiddenTargetConfig {
         regionMax = new Location(a.getWorld(), maxX, maxY, maxZ);
     }
 
+    /** Primair spawnpunt (eerste in de lijst) — gebruikt als anker voor o.a. vuurwerk. */
     public Location getSpawn() {
-        return spawn;
+        return spawns.isEmpty() ? null : spawns.get(0);
     }
 
-    public void setSpawn(Location spawn) {
-        this.spawn = spawn;
+    /** Alle spawnpunten (alleen-lezen). */
+    public List<Location> getSpawns() {
+        return Collections.unmodifiableList(spawns);
+    }
+
+    public int getSpawnCount() {
+        return spawns.size();
+    }
+
+    /** Willekeurig spawnpunt voor respawns/void — verdeelt spelers over de arena. */
+    public Location randomSpawn() {
+        if (spawns.isEmpty()) return null;
+        if (spawns.size() == 1) return spawns.get(0);
+        return spawns.get(ThreadLocalRandom.current().nextInt(spawns.size()));
+    }
+
+    /** Voegt een spawnpunt toe en geeft het nieuwe totaal terug. */
+    public int addSpawn(Location loc) {
+        spawns.add(loc.clone());
         save();
+        return spawns.size();
+    }
+
+    /** Wist alle spawnpunten. */
+    public void clearSpawns() {
+        spawns.clear();
+        save();
+    }
+
+    /**
+     * Verwijdert het spawnpunt het dichtst bij {@code loc} (zelfde wereld). Geeft {@code true}
+     * als er iets verwijderd is.
+     */
+    public boolean removeNearestSpawn(Location loc) {
+        int best = -1;
+        double bestSq = Double.MAX_VALUE;
+        for (int i = 0; i < spawns.size(); i++) {
+            Location s = spawns.get(i);
+            if (s.getWorld() != loc.getWorld()) continue;
+            double dSq = s.distanceSquared(loc);
+            if (dSq < bestSq) {
+                bestSq = dSq;
+                best = i;
+            }
+        }
+        if (best < 0) return false;
+        spawns.remove(best);
+        save();
+        return true;
     }
 
     public Location getRegionMin() {
@@ -149,6 +222,12 @@ public final class HiddenTargetConfig {
 
     public Location getRegionMax() {
         return regionMax;
+    }
+
+    public void clearRegion() {
+        regionMin = null;
+        regionMax = null;
+        save();
     }
 
     public void setCorner(int index, Location loc) {
@@ -218,6 +297,7 @@ public final class HiddenTargetConfig {
     }
 
     public boolean isReady() {
-        return true;
+        // At least one spawn is required: the event teleports everyone there at start and on respawn.
+        return !spawns.isEmpty();
     }
 }

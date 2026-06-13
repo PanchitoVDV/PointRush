@@ -144,6 +144,9 @@ public final class CtfCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleStart(CommandSender sender) {
+        if (Commands.dispatchCrossServerStart(sender, "ctf")) {
+            return;
+        }
         if (game.getState() != CtfGame.State.IDLE) {
             sender.sendMessage(Messages.error("Er loopt al een CTF event."));
             return;

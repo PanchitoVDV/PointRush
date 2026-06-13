@@ -38,6 +38,7 @@ export function collections() {
     playerCoins: process.env.MONGODB_PLAYER_COINS_COLLECTION ?? 'player_coins',
     liveStreams: process.env.MONGODB_LIVE_STREAMS_COLLECTION ?? 'live_streams',
     schedule: process.env.MONGODB_SCHEDULE_COLLECTION ?? 'event_schedule',
+    liveEvent: process.env.MONGODB_LIVE_EVENT_COLLECTION ?? 'live_event',
   };
 }
 

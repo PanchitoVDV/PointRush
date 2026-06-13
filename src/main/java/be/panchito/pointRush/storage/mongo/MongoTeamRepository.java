@@ -5,16 +5,17 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.Updates;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -46,22 +47,74 @@ public final class MongoTeamRepository {
     }
 
     /**
-     * Upserts every live team and deletes Mongo rows that no longer exist in-memory.
+     * Upserts metadata (name, leader, color, members, home) for every team <em>without</em> touching
+     * {@code points}. Safe to run from multiple servers against one database: it never deletes rows it
+     * doesn't know about and never clobbers a points value written atomically elsewhere.
      */
-    public void syncAll(Iterable<Team> liveTeams) {
-        Set<String> wanted = new HashSet<>();
+    public void upsertAllMetadata(Iterable<Team> liveTeams) {
         for (Team team : liveTeams) {
-            wanted.add(team.getId().toString());
-            teams.replaceOne(
-                    Filters.eq("_id", team.getId().toString()),
-                    toDocument(team),
-                    new ReplaceOptions().upsert(true));
+            upsertMetadata(team);
         }
-        if (wanted.isEmpty()) {
-            teams.deleteMany(new Document());
-            return;
+    }
+
+    /**
+     * Upserts a single team's metadata. The {@code points} field is only set on insert
+     * ({@code $setOnInsert}); on an existing document it is left untouched so concurrent atomic
+     * point writes from another server are never overwritten.
+     */
+    public void upsertMetadata(Team team) {
+        List<Bson> updates = new ArrayList<>();
+        updates.add(Updates.set("name", team.getName()));
+        updates.add(Updates.set("leader", team.getLeader().toString()));
+        updates.add(Updates.set("color", team.getColor().toString()));
+        updates.add(Updates.set("members", team.getMembers().stream().map(UUID::toString).toList()));
+        Location home = team.getHome();
+        if (home != null && home.getWorld() != null) {
+            updates.add(Updates.set("home", homeDocument(home)));
+        } else {
+            updates.add(Updates.unset("home"));
         }
-        teams.deleteMany(Filters.nin("_id", wanted));
+        updates.add(Updates.setOnInsert("points", team.getPoints()));
+        teams.updateOne(Filters.eq("_id", team.getId().toString()),
+                Updates.combine(updates),
+                new UpdateOptions().upsert(true));
+    }
+
+    /**
+     * Atomically adds {@code delta} to a team's points ({@code $inc}). Commutative, so simultaneous
+     * awards from multiple servers can never lose an update. Self-heals if the document does not exist
+     * yet by writing the full team (with its already-updated in-memory points).
+     */
+    public void incrementPoints(Team team, long delta) {
+        long matched = teams.updateOne(Filters.eq("_id", team.getId().toString()),
+                Updates.inc("points", delta)).getMatchedCount();
+        if (matched == 0) {
+            teams.replaceOne(Filters.eq("_id", team.getId().toString()),
+                    toDocument(team), new ReplaceOptions().upsert(true));
+        }
+    }
+
+    /**
+     * Authoritatively sets a team's points ({@code $set}). Used for admin set/reset/remove — rare and
+     * intentionally last-writer-wins, unlike the commutative {@link #incrementPoints} hot path.
+     */
+    public void setPoints(Team team, long value) {
+        long matched = teams.updateOne(Filters.eq("_id", team.getId().toString()),
+                Updates.set("points", value)).getMatchedCount();
+        if (matched == 0) {
+            teams.replaceOne(Filters.eq("_id", team.getId().toString()),
+                    toDocument(team), new ReplaceOptions().upsert(true));
+        }
+    }
+
+    /** Deletes a single team. Called explicitly on disband — routine saves never delete. */
+    public void deleteTeam(UUID id) {
+        teams.deleteOne(Filters.eq("_id", id.toString()));
+    }
+
+    /** Deletes every team. Returns the number removed. */
+    public long deleteAll() {
+        return teams.deleteMany(new Document()).getDeletedCount();
     }
 
     private static Document toDocument(Team team) {
@@ -74,14 +127,18 @@ public final class MongoTeamRepository {
                 .append("members", memberStrings);
         Location home = team.getHome();
         if (home != null && home.getWorld() != null) {
-            doc.append("home", new Document("world", home.getWorld().getName())
-                    .append("x", home.getX())
-                    .append("y", home.getY())
-                    .append("z", home.getZ())
-                    .append("yaw", (double) home.getYaw())
-                    .append("pitch", (double) home.getPitch()));
+            doc.append("home", homeDocument(home));
         }
         return doc;
+    }
+
+    private static Document homeDocument(Location home) {
+        return new Document("world", home.getWorld().getName())
+                .append("x", home.getX())
+                .append("y", home.getY())
+                .append("z", home.getZ())
+                .append("yaw", (double) home.getYaw())
+                .append("pitch", (double) home.getPitch());
     }
 
     private static Team fromDocument(Document doc) {
@@ -107,7 +164,7 @@ public final class MongoTeamRepository {
         if (color == null) {
             color = NamedTextColor.WHITE;
         }
-        long points = doc.get("points") instanceof Number n ? n.longValue() : doc.getLong("points");
+        long points = doc.get("points") instanceof Number n ? n.longValue() : 0L;
 
         Team team = new Team(id, name, leader, color);
         team.setPoints(points);

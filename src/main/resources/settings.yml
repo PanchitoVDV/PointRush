@@ -6,6 +6,30 @@
 # Vul hier de exacte naam van je hub-/lobbywereld in. Standaard "world".
 lobby-world: world
 
+# Multi-server (Velocity) opstelling om events te isoleren op een aparte events-server.
+# Staat standaard UIT: dan draait alles lokaal, precies zoals een losse server.
+#
+# Vereist op de proxy: Velocity met `bungee-plugin-message-channel = true` in velocity.toml
+# (standaard aan). De servernamen hieronder moeten exact overeenkomen met je [servers] in velocity.toml.
+# Beide servers draaien deze plugin en wijzen naar DEZELFDE mongodb.uri (gedeelde teams/punten).
+network:
+  enabled: false
+  # Rol van DEZE server: "standalone" (los), "survival" (hoofdserver) of "events" (event-host).
+  role: standalone
+  # Servernaam van de event-host op de proxy.
+  events-server: events
+  # Servernaam van de hoofd-/survival-server op de proxy.
+  survival-server: survival
+  # Hoe spelers tussen servers verplaatst worden:
+  #   leeg   = standaard BungeeCord/Velocity plugin-message (Connect <server>)
+  #   anders = voer dit commando uit als de speler, met {server} als doelserver
+  # Gebruik dit als je netwerk een eigen transfer-commando heeft (bv. "move {server}" i.p.v. /server).
+  transfer-command: ""
+  # Seconden die de events-host wacht na een event-aanvraag zodat spelers binnen zijn vóór de start.
+  join-grace-seconds: 6
+  # Seconden na afloop voordat spelers terug naar survival gestuurd worden (laat de eindscreen zien).
+  return-delay-seconds: 6
+
 # Ultimate UI profielmenu (/profile) — placeholders %pointrush_...%
 profile:
   website-url: https://cloudito.cloud
@@ -47,13 +71,16 @@ mongodb:
   live-streams-collection: live_streams
   # Geplande random events + pool voor /randomevent en /event start.
   schedule-collection: event_schedule
+  # Gedeeld "live event" doc voor cross-server orkestratie (network-modus).
+  live-event-collection: live_event
 
 cache:
   leaderboard-cache-enabled: true
   async-writes: true
   debounce-ms: 400
 
-parkour: {}
+parkour:
+  durationMinutes: 10
 
 tnttag: {}
 
@@ -83,7 +110,7 @@ hiddentarget:
   durationMinutes: 10
   killPoints: 1
   huntedPenalty: 1
-  respawnSeconds: 5
+  respawnSeconds: 60
 
 ctf:
   roundMinutes: 5

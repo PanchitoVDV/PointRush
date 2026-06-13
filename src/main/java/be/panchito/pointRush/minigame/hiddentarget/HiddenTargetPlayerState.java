@@ -21,6 +21,7 @@ public final class HiddenTargetPlayerState {
     private int targetKills = 0;
     private int deaths = 0;
     private int huntedDeaths = 0;
+    private int wrongKills = 0;
     private int pointsEarned = 0;
     private int pointsLost = 0;
 
@@ -88,6 +89,14 @@ public final class HiddenTargetPlayerState {
 
     public void incrementHuntedDeaths() {
         this.huntedDeaths++;
+    }
+
+    public int getWrongKills() {
+        return wrongKills;
+    }
+
+    public void incrementWrongKills() {
+        this.wrongKills++;
     }
 
     public int getPointsEarned() {

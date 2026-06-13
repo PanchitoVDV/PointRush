@@ -76,7 +76,8 @@ public final class MinigameGadgetEngine {
             }
         }
 
-        return applyGadget(plugin, game.getGadgetCooldownMap(), player, type, slot, pool);
+        return applyGadget(plugin, game.getGadgetCooldownMap(), ParkourGame.ITEM_COOLDOWN_MS,
+                player, type, slot, pool);
     }
 
     public static Result tryTntTag(PointRush plugin, TntTagGame game, Player player,
@@ -101,7 +102,8 @@ public final class MinigameGadgetEngine {
             if (p != null) pool.add(p);
         }
 
-        return applyGadget(plugin, game.getGadgetCooldownMap(), player, type, slot, pool);
+        return applyGadget(plugin, game.getGadgetCooldownMap(), GADGET_COOLDOWN_MS,
+                player, type, slot, pool);
     }
 
     public static Result tryKoth(PointRush plugin, KothGame game, Player player,
@@ -126,7 +128,8 @@ public final class MinigameGadgetEngine {
             if (p != null) pool.add(p);
         }
 
-        return applyGadget(plugin, game.getGadgetCooldownMap(), player, type, slot, pool);
+        return applyGadget(plugin, game.getGadgetCooldownMap(), GADGET_COOLDOWN_MS,
+                player, type, slot, pool);
     }
 
     public static Result tryTntRun(PointRush plugin, TntRunGame game, Player player,
@@ -155,10 +158,11 @@ public final class MinigameGadgetEngine {
             if (p != null) pool.add(p);
         }
 
-        return applyGadget(plugin, game.getGadgetCooldownMap(), player, type, slot, pool);
+        return applyGadget(plugin, game.getGadgetCooldownMap(), GADGET_COOLDOWN_MS,
+                player, type, slot, pool);
     }
 
-    private static Result applyGadget(PointRush plugin, Map<UUID, Long> cooldownMap,
+    private static Result applyGadget(PointRush plugin, Map<UUID, Long> cooldownMap, long cooldownMs,
                                       Player user, MinigameGadgetType type, EquipmentSlot slot,
                                       List<Player> victimPool) {
         long now = System.currentTimeMillis();
@@ -174,7 +178,7 @@ public final class MinigameGadgetEngine {
                 default -> applyTurbo(plugin, user);
             }
             consumeOne(plugin, user, slot, type);
-            cooldownMap.put(user.getUniqueId(), now + GADGET_COOLDOWN_MS);
+            cooldownMap.put(user.getUniqueId(), now + cooldownMs);
             if (type != MinigameGadgetType.SPRING_STICK) {
                 user.playSound(user.getLocation(), Sound.ENTITY_GENERIC_DRINK, 0.9f, 1.2f);
             }

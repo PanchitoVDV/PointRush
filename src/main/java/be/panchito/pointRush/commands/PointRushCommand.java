@@ -18,6 +18,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
@@ -57,11 +58,14 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
     private final EventHistoryManager historyManager;
     private final TeamManager teamManager;
     private final DataManager dataManager;
+    private final AdminEventMenu adminMenu;
 
-    public PointRushCommand(EventHistoryManager historyManager, TeamManager teamManager, DataManager dataManager) {
+    public PointRushCommand(EventHistoryManager historyManager, TeamManager teamManager,
+                            DataManager dataManager, AdminEventMenu adminMenu) {
         this.historyManager = historyManager;
         this.teamManager = teamManager;
         this.dataManager = dataManager;
+        this.adminMenu = adminMenu;
     }
 
     @Override
@@ -76,6 +80,7 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
             case "history" -> handleHistory(sender, args);
             case "event" -> handleEvent(sender, args);
             case "reset" -> handleReset(sender, args);
+            case "admin" -> handleAdmin(sender);
             case "help" -> sendOverview(sender);
             default -> {
                 if (EVENTS.containsKey(sub)) {
@@ -186,6 +191,18 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
                 .hoverEvent(HoverEvent.showText(Component.text(
                         SmallText.of("klik om de placements te bekijken"),
                         NamedTextColor.GRAY)));
+    }
+
+    private void handleAdmin(CommandSender sender) {
+        if (!sender.hasPermission(RESET_PERMISSION)) {
+            sender.sendMessage(Messages.error("Je hebt geen permissie voor dit commando."));
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Messages.error("Dit menu kan alleen door een speler geopend worden."));
+            return;
+        }
+        adminMenu.openList(player);
     }
 
     private void handleReset(CommandSender sender, String[] args) {
@@ -334,6 +351,7 @@ public final class PointRushCommand implements CommandExecutor, TabCompleter {
             if (sender.hasPermission(RESET_PERMISSION)
                     || sender instanceof org.bukkit.command.ConsoleCommandSender) {
                 options.add("reset");
+                options.add("admin");
             }
             options.addAll(EVENTS.keySet());
             return Commands.filterPrefix(options, args[0]);

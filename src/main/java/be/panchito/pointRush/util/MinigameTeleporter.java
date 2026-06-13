@@ -36,7 +36,7 @@ public final class MinigameTeleporter {
 
     /** Teleporteert exact naar {@code target} (geen veiligheidsverplaatsing — de locatie is bekend/veilig). */
     public void teleport(Player player, Location target) {
-        teleport(player, target, false);
+        teleport(player, target, false, null);
     }
 
     /**
@@ -45,23 +45,42 @@ public final class MinigameTeleporter {
      * opgeslagen startlocatie wil je dit meestal {@code false}.
      */
     public void teleport(Player player, Location target, boolean checkSafety) {
+        teleport(player, target, checkSafety, null);
+    }
+
+    /**
+     * Zoals {@link #teleport(Player, Location, boolean)}, maar voert {@code afterTeleport} uit op de
+     * hoofd-thread zodra de (mogelijk async, cross-world) teleport is afgerond. Gebruik dit wanneer je
+     * pas in de doelwereld iets met de speler wil doen — bv. items geven die anders door een per-wereld
+     * inventory-swap zouden verdwijnen.
+     */
+    public void teleport(Player player, Location target, boolean checkSafety, Runnable afterTeleport) {
         if (player == null || target == null || target.getWorld() == null) {
             return;
         }
-        if (multiverseAvailable && teleportViaMultiverse(player, target, checkSafety)) {
+        Runnable callback = afterTeleport == null ? null
+                : () -> plugin.getServer().getScheduler().runTask(plugin, afterTeleport);
+        if (multiverseAvailable && teleportViaMultiverse(player, target, checkSafety, callback)) {
             return;
         }
         // Paper laadt de doel-chunk async en teleporteert daarna betrouwbaar over werelden heen.
-        player.teleportAsync(target);
+        var future = player.teleportAsync(target);
+        if (callback != null) {
+            future.thenRun(callback);
+        }
     }
 
-    private boolean teleportViaMultiverse(Player player, Location target, boolean checkSafety) {
+    private boolean teleportViaMultiverse(Player player, Location target, boolean checkSafety,
+                                          Runnable callback) {
         try {
-            MultiverseCoreApi.get()
+            var aggregate = MultiverseCoreApi.get()
                     .getSafetyTeleporter()
                     .to(target)
                     .checkSafety(checkSafety)
                     .teleportSingle(player);
+            if (callback != null) {
+                aggregate.thenRun(callback);
+            }
             return true;
         } catch (Throwable ex) {
             plugin.getLogger().log(Level.WARNING,
