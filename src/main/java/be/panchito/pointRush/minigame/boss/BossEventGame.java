@@ -181,6 +181,12 @@ public final class BossEventGame {
         Collections.shuffle(eligible);
         assignPlayersToArenas(eligible, arenaConfigs.subList(0, neededArenas));
 
+        List<String> arenaIds = new ArrayList<>();
+        for (BossEventArenaRun run : activeArenas) {
+            arenaIds.add(run.getId());
+        }
+        scoreboard.initArenaBars(arenaIds);
+
         long now = System.currentTimeMillis();
         eventStartedAtMs = now;
         phaseEndsMs = now + COUNTDOWN_SECONDS * 1000L;
@@ -193,7 +199,7 @@ public final class BossEventGame {
         }
 
         scoreboard.start();
-        scoreboard.updateBossBar("start in " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.YELLOW);
+        scoreboard.updateInfoBar("start in " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.YELLOW);
         broadcastTitle(
                 Component.text(SmallText.of("BOSS EVENT"), NamedTextColor.DARK_RED, TextDecoration.BOLD),
                 Component.text(SmallText.of("3 arena-rondes · daarna de finaal"), NamedTextColor.GRAY)
@@ -267,8 +273,9 @@ public final class BossEventGame {
 
         BossEventArenaRun run = getArenaForPlayer(player.getUniqueId());
         scoreboard.attach(player);
+        int arenaSize = run != null ? run.getPlayers().size() : 0;
         player.sendMessage(Messages.info("Boss Event — arena " + ps.getArenaId()
-                + " (" + run.getPlayers().size() + " spelers)."));
+                + " (" + arenaSize + " spelers)."));
 
         if (run != null && run.getConfig().getPlayerSpawn() != null) {
             // Kit pas ná de (mogelijk async, cross-world) teleport geven — anders wist een per-wereld
@@ -299,7 +306,7 @@ public final class BossEventGame {
     private void tickCountdown(long now) {
         long left = Math.max(0L, phaseEndsMs - now);
         float progress = left / (float) (COUNTDOWN_SECONDS * 1000L);
-        scoreboard.updateBossBar("start in " + formatTime(left), progress, BossBar.Color.YELLOW);
+        scoreboard.updateInfoBar("start in " + formatTime(left), progress, BossBar.Color.YELLOW);
         if (left <= 0) {
             state = State.RUNNING;
             beginArenaRound(1);
@@ -322,7 +329,42 @@ public final class BossEventGame {
                 Component.text(SmallText.of("versla de boss — dood = uitgeschakeld"), NamedTextColor.RED)
         );
         playSoundAll(Sound.ENTITY_ENDER_DRAGON_GROWL, 0.7f, 1.0f);
-        scoreboard.updateBossBar("ronde " + round + " · " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.RED);
+        updateArenaBars();
+    }
+
+    /** Werk de live HP-bar van elke arena bij (groen wanneer de boss verslagen is). */
+    private void updateArenaBars() {
+        for (BossEventArenaRun run : activeArenas) {
+            String label = "arena " + run.getId();
+            if (run.isRoundComplete()) {
+                scoreboard.updateArenaBar(run.getId(), label + " · boss verslagen!", 1.0f, BossBar.Color.GREEN);
+                continue;
+            }
+            double frac = mythic.getBossHealthFraction(run.getActiveBossId());
+            if (frac < 0) {
+                scoreboard.updateArenaBar(run.getId(), label + " · ronde " + currentRound, 1.0f, BossBar.Color.RED);
+                continue;
+            }
+            BossBar.Color color = frac > 0.25 ? BossBar.Color.RED : BossBar.Color.YELLOW;
+            int pct = (int) Math.ceil(frac * 100);
+            scoreboard.updateArenaBar(run.getId(), label + " · boss " + pct + "%", (float) frac, color);
+        }
+    }
+
+    /** Live HP-bar van de finaal-boss (gedeelde info-bar). */
+    private void updateFinalBar() {
+        if (finalRoundComplete) {
+            scoreboard.updateInfoBar("FINAAL · boss verslagen!", 1.0f, BossBar.Color.GREEN);
+            return;
+        }
+        double frac = mythic.getBossHealthFraction(finalBossId);
+        if (frac < 0) {
+            scoreboard.updateInfoBar("FINAAL · versla de boss", 1.0f, BossBar.Color.PURPLE);
+            return;
+        }
+        BossBar.Color color = frac > 0.25 ? BossBar.Color.PURPLE : BossBar.Color.RED;
+        int pct = (int) Math.ceil(frac * 100);
+        scoreboard.updateInfoBar("FINAAL · boss " + pct + "%", (float) frac, color);
     }
 
     private void respawnArenaPlayers(BossEventArenaRun run) {
@@ -364,10 +406,9 @@ public final class BossEventGame {
 
     private void tickArenaRound(long now) {
         long left = Math.max(0L, phaseEndsMs - now);
-        float progress = left / (float) config.getRoundTimeoutMs();
-        scoreboard.updateBossBar("ronde " + currentRound + " · " + formatTime(left), progress, BossBar.Color.RED);
 
         detectArenaBossDeaths();
+        updateArenaBars();
 
         if (allArenasRoundComplete()) {
             onArenaRoundComplete();
@@ -414,14 +455,14 @@ public final class BossEventGame {
                 Component.text(SmallText.of("RONDE " + currentRound + " KLAAR"), NamedTextColor.GREEN, TextDecoration.BOLD),
                 Component.text(SmallText.of("volgende ronde over " + config.getIntermissionSeconds() + "s"), NamedTextColor.GRAY)
         );
-        scoreboard.updateBossBar("pauze · ronde " + (currentRound + 1) + " over "
+        scoreboard.updateInfoBar("pauze · ronde " + (currentRound + 1) + " over "
                 + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.YELLOW);
     }
 
     private void tickIntermission(long now) {
         long left = Math.max(0L, phaseEndsMs - now);
         float progress = left / (float) config.getIntermissionMs();
-        scoreboard.updateBossBar("pauze · ronde " + (currentRound + 1) + " over " + formatTime(left),
+        scoreboard.updateInfoBar("pauze · ronde " + (currentRound + 1) + " over " + formatTime(left),
                 progress, BossBar.Color.YELLOW);
         if (left <= 0) {
             beginArenaRound(currentRound + 1);
@@ -482,13 +523,13 @@ public final class BossEventGame {
                 Component.text(SmallText.of("FINAALRONDE"), NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD),
                 Component.text(SmallText.of("iedereen vecht de laatste boss"), NamedTextColor.GRAY)
         );
-        scoreboard.updateBossBar("finaal over " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.PURPLE);
+        scoreboard.updateInfoBar("finaal over " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.PURPLE);
     }
 
     private void tickFinalCountdown(long now) {
         long left = Math.max(0L, phaseEndsMs - now);
         float progress = left / (float) (FINAL_COUNTDOWN_SECONDS * 1000L);
-        scoreboard.updateBossBar("finaal over " + formatTime(left), progress, BossBar.Color.PURPLE);
+        scoreboard.updateInfoBar("finaal over " + formatTime(left), progress, BossBar.Color.PURPLE);
         if (left <= 0) {
             beginFinalRound();
         }
@@ -519,13 +560,13 @@ public final class BossEventGame {
                 Component.text(SmallText.of("bonus of troostprijs bij overleven"), NamedTextColor.GRAY)
         );
         playSoundAll(Sound.ENTITY_WITHER_SPAWN, 0.8f, 0.6f);
-        scoreboard.updateBossBar("finaal · " + formatTime(getPhaseTimeLeftMs()), 1.0f, BossBar.Color.PURPLE);
+        scoreboard.updateInfoBar("FINAAL · boss verschijnt", 1.0f, BossBar.Color.PURPLE);
     }
 
     private void tickFinalRound(long now) {
         long left = Math.max(0L, phaseEndsMs - now);
-        float progress = left / (float) config.getRoundTimeoutMs();
-        scoreboard.updateBossBar("finaal · " + formatTime(left), progress, BossBar.Color.PURPLE);
+
+        updateFinalBar();
 
         if (!finalRoundComplete && finalBossId != null && mythic.isBossGone(finalBossId)) {
             handleBossDeath(finalBossId);
@@ -552,6 +593,33 @@ public final class BossEventGame {
             if (bossId != null && mythic.isBossGone(bossId)) {
                 handleBossDeath(bossId);
             }
+        }
+    }
+
+    /** True wanneer dit entity-id een momenteel levende arena- of finaal-boss is. */
+    public boolean isActiveBoss(UUID entityId) {
+        if (entityId == null) {
+            return false;
+        }
+        if (entityId.equals(finalBossId)) {
+            return true;
+        }
+        for (BossEventArenaRun run : activeArenas) {
+            if (entityId.equals(run.getActiveBossId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Tel schade aan een boss mee voor de MVP-prijs (alleen tijdens echte vecht-fases). */
+    public void addBossDamage(Player player, double amount) {
+        if (amount <= 0 || (phase != Phase.ARENA_ROUND && phase != Phase.FINAL_ROUND)) {
+            return;
+        }
+        BossEventPlayerState ps = players.get(player.getUniqueId());
+        if (ps != null) {
+            ps.addBossDamage(amount);
         }
     }
 
@@ -585,8 +653,33 @@ public final class BossEventGame {
                 }
                 run.setActiveBossId(null);
                 run.setRoundComplete(true);
-                Bukkit.broadcast(Messages.info("Boss verslagen in arena " + run.getId() + "!"));
+                titleArena(run,
+                        Component.text(SmallText.of("BOSS VERSLAGEN"), NamedTextColor.GOLD, TextDecoration.BOLD),
+                        Component.text(SmallText.of("ronde " + currentRound + " geklaard!"), NamedTextColor.GREEN));
+                playSoundArena(run, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
+                playSoundArena(run, Sound.ENTITY_PLAYER_LEVELUP, 0.7f, 1.2f);
+                Bukkit.broadcast(Messages.info("Arena " + run.getId() + " heeft de boss verslagen!"));
                 return;
+            }
+        }
+    }
+
+    private void titleArena(BossEventArenaRun run, Component title, Component subtitle) {
+        Title t = Title.title(title, subtitle, Title.Times.times(
+                Duration.ofMillis(300), Duration.ofMillis(2000), Duration.ofMillis(500)));
+        for (UUID id : run.getPlayers()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null) {
+                p.showTitle(t);
+            }
+        }
+    }
+
+    private void playSoundArena(BossEventArenaRun run, Sound sound, float volume, float pitch) {
+        for (UUID id : run.getPlayers()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null) {
+                p.playSound(p.getLocation(), sound, volume, pitch);
             }
         }
     }
@@ -681,10 +774,54 @@ public final class BossEventGame {
         if (phase == Phase.FINAL_ROUND || phase == Phase.FINAL_COUNTDOWN || natural) {
             markFinalSurvivors();
             awardFinalPoints();
+            awardMvp();
         }
         recordHistoryEntry();
         cleanupAfterStop();
         Bukkit.broadcast(Messages.info("Boss Event afgelopen."));
+    }
+
+    /** Beloon de speler die in totaal de meeste boss-schade uitdeelde. */
+    private void awardMvp() {
+        int mvpPts = config.getMvpPoints();
+        if (mvpPts <= 0) {
+            return;
+        }
+        BossEventPlayerState best = null;
+        for (BossEventPlayerState ps : players.values()) {
+            if (ps.getBossDamage() <= 0) {
+                continue;
+            }
+            if (best == null || ps.getBossDamage() > best.getBossDamage()) {
+                best = ps;
+            }
+        }
+        if (best == null) {
+            return;
+        }
+        best.setMvp(true);
+        best.addPointsEarned(mvpPts);
+        Team team = teamManager.getTeamOfPlayer(best.getUuid());
+        if (team != null) {
+            dataManager.addTeamPoints(team, mvpPts);
+        }
+
+        Player mvp = Bukkit.getPlayer(best.getUuid());
+        String name = mvp != null ? mvp.getName() : "Een speler";
+        for (BossEventPlayerState ps : players.values()) {
+            Player p = Bukkit.getPlayer(ps.getUuid());
+            if (p != null) {
+                p.sendMessage(Messages.success("MVP: " + name + " deelde de meeste boss-schade uit (+"
+                        + mvpPts + " punten)!"));
+            }
+        }
+        if (mvp != null) {
+            mvp.showTitle(Title.title(
+                    Component.text(SmallText.of("MVP!"), NamedTextColor.GOLD, TextDecoration.BOLD),
+                    Component.text(SmallText.of("meeste boss-schade · +" + mvpPts + " punten"), NamedTextColor.YELLOW),
+                    Title.Times.times(Duration.ofMillis(300), Duration.ofMillis(2500), Duration.ofMillis(700))));
+            mvp.playSound(mvp.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.4f);
+        }
     }
 
     private void markFinalSurvivors() {
@@ -805,7 +942,9 @@ public final class BossEventGame {
             String name = p != null ? p.getName() : ps.getUuid().toString().substring(0, 8);
             Team team = teamManager.getTeamOfPlayer(ps.getUuid());
             String detail = (ps.isArenaSurvivor() ? "arena-overlever" : "uitgeschakeld")
-                    + " · finaal: " + (ps.isFinalSurvivor() ? "overleefd" : "neen");
+                    + " · finaal: " + (ps.isFinalSurvivor() ? "overleefd" : "neen")
+                    + " · schade: " + (long) ps.getBossDamage()
+                    + (ps.isMvp() ? " · MVP" : "");
             placements.add(new EventHistoryEntry.Placement(
                     rank++,
                     ps.getUuid(),

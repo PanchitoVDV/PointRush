@@ -1,5 +1,6 @@
 package be.panchito.pointRush;
 
+import be.panchito.pointRush.commands.CamperCommand;
 import be.panchito.pointRush.commands.DimensionCommand;
 import be.panchito.pointRush.commands.ProfileWebsiteCommand;
 import be.panchito.pointRush.commands.EventCommand;
@@ -46,6 +47,14 @@ import be.panchito.pointRush.minigame.tntrun.TntRunCommand;
 import be.panchito.pointRush.minigame.tntrun.TntRunConfig;
 import be.panchito.pointRush.minigame.tntrun.TntRunGame;
 import be.panchito.pointRush.minigame.tntrun.TntRunListener;
+import be.panchito.pointRush.minigame.dropper.DropperCommand;
+import be.panchito.pointRush.minigame.dropper.DropperConfig;
+import be.panchito.pointRush.minigame.dropper.DropperGame;
+import be.panchito.pointRush.minigame.dropper.DropperListener;
+import be.panchito.pointRush.minigame.finale.FinaleCommand;
+import be.panchito.pointRush.minigame.finale.FinaleConfig;
+import be.panchito.pointRush.minigame.finale.FinaleGame;
+import be.panchito.pointRush.minigame.finale.FinaleListener;
 import be.panchito.pointRush.minigame.koth.KothCommand;
 import be.panchito.pointRush.minigame.koth.KothConfig;
 import be.panchito.pointRush.minigame.koth.KothGame;
@@ -70,6 +79,11 @@ import be.panchito.pointRush.minigame.ctf.CtfCommand;
 import be.panchito.pointRush.minigame.ctf.CtfConfig;
 import be.panchito.pointRush.minigame.ctf.CtfGame;
 import be.panchito.pointRush.minigame.ctf.CtfListener;
+import be.panchito.pointRush.minigame.football.BlockBallBridge;
+import be.panchito.pointRush.minigame.football.FootballCommand;
+import be.panchito.pointRush.minigame.football.FootballConfig;
+import be.panchito.pointRush.minigame.football.FootballGame;
+import be.panchito.pointRush.minigame.football.FootballListener;
 import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownCommand;
 import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownConfig;
 import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownGame;
@@ -132,6 +146,12 @@ public final class PointRush extends JavaPlugin {
     private TntRunConfig tntRunConfig;
     private TntRunGame tntRunGame;
 
+    private DropperConfig dropperConfig;
+    private DropperGame dropperGame;
+
+    private FinaleConfig finaleConfig;
+    private FinaleGame finaleGame;
+
     private RaceConfig raceConfig;
     private RaceGame raceGame;
 
@@ -165,6 +185,10 @@ public final class PointRush extends JavaPlugin {
     private MythicMobsBridge mythicMobsBridge;
     private BossEventConfig bossEventConfig;
     private BossEventGame bossEventGame;
+
+    private BlockBallBridge blockBallBridge;
+    private FootballConfig footballConfig;
+    private FootballGame footballGame;
 
     private CoinSpawnConfig coinSpawnConfig;
     private NexoCoinSpawner nexoCoinSpawner;
@@ -248,6 +272,7 @@ public final class PointRush extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new AdminEventMenuListener(adminEventMenu), this);
         registerCommand("prwebsite", new ProfileWebsiteCommand(playerProfileService));
 
+        registerCommand("camper", new CamperCommand(teamManager));
         registerCommand("dimension", new DimensionCommand(worldAccessSettings));
         getServer().getPluginManager().registerEvents(
                 new DimensionPortalListener(worldAccessSettings), this);
@@ -287,6 +312,18 @@ public final class PointRush extends JavaPlugin {
         this.tntRunGame = new TntRunGame(this, tntRunConfig);
         registerCommand("tntrun", new TntRunCommand(tntRunGame, tntRunConfig));
         getServer().getPluginManager().registerEvents(new TntRunListener(tntRunGame), this);
+
+        this.dropperConfig = new DropperConfig(this, unifiedSettings);
+        dropperConfig.load();
+        this.dropperGame = new DropperGame(this, dropperConfig);
+        registerCommand("dropper", new DropperCommand(dropperGame, dropperConfig));
+        getServer().getPluginManager().registerEvents(new DropperListener(dropperGame), this);
+
+        this.finaleConfig = new FinaleConfig(this, unifiedSettings);
+        finaleConfig.load();
+        this.finaleGame = new FinaleGame(this, finaleConfig);
+        registerCommand("finale", new FinaleCommand(finaleGame, finaleConfig));
+        getServer().getPluginManager().registerEvents(new FinaleListener(finaleGame), this);
 
         this.raceConfig = new RaceConfig(this, unifiedSettings);
         raceConfig.load();
@@ -355,6 +392,13 @@ public final class PointRush extends JavaPlugin {
         registerCommand("bossevent", new BossEventCommand(bossEventGame, bossEventConfig));
         getServer().getPluginManager().registerEvents(new BossEventListener(bossEventGame), this);
 
+        this.blockBallBridge = new BlockBallBridge(this);
+        this.footballConfig = new FootballConfig(this, unifiedSettings);
+        footballConfig.load();
+        this.footballGame = new FootballGame(this, footballConfig, blockBallBridge);
+        registerCommand("pointball", new FootballCommand(footballGame, footballConfig, blockBallBridge));
+        getServer().getPluginManager().registerEvents(new FootballListener(footballGame), this);
+
         this.coinSpawnConfig = new CoinSpawnConfig(this, unifiedSettings);
         coinSpawnConfig.load();
         this.coinCreditRegistry = CoinCreditRegistry.load(unifiedSettings);
@@ -387,6 +431,8 @@ public final class PointRush extends JavaPlugin {
                 + ", parkour klaar: " + parkourConfig.isReady()
                 + ", tnttag klaar: " + tntTagConfig.isReady()
                 + ", tntrun klaar: " + tntRunConfig.isReady()
+                + ", dropper klaar: " + dropperConfig.isReady()
+                + ", finale klaar: " + finaleConfig.isReady()
                 + ", race klaar: " + raceConfig.isReady()
                 + ", bootrace klaar: " + boatRaceConfig.isReady()
                 + ", bingo klaar: " + bingoConfig.isReady()
@@ -398,6 +444,7 @@ public final class PointRush extends JavaPlugin {
                 + ", ctf klaar: " + ctfConfig.isReady()
                 + ", holdthecrown klaar: " + holdTheCrownConfig.isReady()
                 + ", bossevent klaar: " + bossEventConfig.isReady()
+                + ", football klaar: " + footballConfig.isReady()
                 + ", coins spawner klaar: " + coinSpawnConfig.isRunnable()
                 + " (nexo-async event volgt mogelijk nog).");
     }
@@ -427,6 +474,12 @@ public final class PointRush extends JavaPlugin {
         }
         if (tntRunGame != null && tntRunGame.getState() != TntRunGame.State.IDLE) {
             tntRunGame.stop();
+        }
+        if (dropperGame != null && dropperGame.getState() != DropperGame.State.IDLE) {
+            dropperGame.stop();
+        }
+        if (finaleGame != null && finaleGame.getState() != FinaleGame.State.IDLE) {
+            finaleGame.stop();
         }
         if (raceGame != null && raceGame.getState() != RaceGame.State.IDLE) {
             raceGame.stop();
@@ -460,6 +513,9 @@ public final class PointRush extends JavaPlugin {
         }
         if (bossEventGame != null && bossEventGame.getState() != BossEventGame.State.IDLE) {
             bossEventGame.stop();
+        }
+        if (footballGame != null && footballGame.getState() != FootballGame.State.IDLE) {
+            footballGame.stop();
         }
         if (coinTotalCache != null) {
             coinTotalCache.stop();
@@ -572,6 +628,22 @@ public final class PointRush extends JavaPlugin {
         return tntRunConfig;
     }
 
+    public DropperGame getDropperGame() {
+        return dropperGame;
+    }
+
+    public DropperConfig getDropperConfig() {
+        return dropperConfig;
+    }
+
+    public FinaleGame getFinaleGame() {
+        return finaleGame;
+    }
+
+    public FinaleConfig getFinaleConfig() {
+        return finaleConfig;
+    }
+
     public RaceGame getRaceGame() {
         return raceGame;
     }
@@ -658,6 +730,18 @@ public final class PointRush extends JavaPlugin {
 
     public BossEventConfig getBossEventConfig() {
         return bossEventConfig;
+    }
+
+    public FootballGame getFootballGame() {
+        return footballGame;
+    }
+
+    public FootballConfig getFootballConfig() {
+        return footballConfig;
+    }
+
+    public BlockBallBridge getBlockBallBridge() {
+        return blockBallBridge;
     }
 
     public RandomEventService getRandomEventService() {

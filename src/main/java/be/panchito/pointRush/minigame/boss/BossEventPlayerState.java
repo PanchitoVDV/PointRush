@@ -21,6 +21,8 @@ public final class BossEventPlayerState {
     private boolean finalAlive = true;
     private boolean finalSurvivor;
     private int pointsEarned;
+    private double bossDamage;
+    private boolean mvp;
 
     public BossEventPlayerState(UUID uuid, Location savedLocation, GameMode savedGameMode) {
         this.uuid = uuid;
@@ -89,6 +91,25 @@ public final class BossEventPlayerState {
 
     public void addPointsEarned(int amount) {
         this.pointsEarned += amount;
+    }
+
+    /** Totale schade die deze speler aan bosses deed — bepaalt de MVP. */
+    public double getBossDamage() {
+        return bossDamage;
+    }
+
+    public void addBossDamage(double amount) {
+        if (amount > 0) {
+            this.bossDamage += amount;
+        }
+    }
+
+    public boolean isMvp() {
+        return mvp;
+    }
+
+    public void setMvp(boolean mvp) {
+        this.mvp = mvp;
     }
 
     /** Spectator in huidige fase (arena of finaal). */

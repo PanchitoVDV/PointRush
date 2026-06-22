@@ -88,11 +88,11 @@ public final class TntTagGame {
     public static final double INITIAL_TAG_FRACTION = 0.33;
 
     /** Points granted per round survived (per team, per surviving member). */
-    public static final int POINTS_PER_ROUND_SURVIVED = 10;
-    /** Bonus to the last team alive (split per surviving member). */
-    public static final int POINTS_LAST_TEAM_BONUS = 200;
+    public static final int POINTS_PER_ROUND_SURVIVED = 5;
+    /** Bonus to the last team alive — in lijn met de win (~100) van de andere events. */
+    public static final int POINTS_LAST_TEAM_BONUS = 100;
     /** Bonus to a solo survivor (no team). */
-    public static final int POINTS_LAST_PLAYER_BONUS = 75;
+    public static final int POINTS_LAST_PLAYER_BONUS = 50;
 
     private final PointRush plugin;
     private final TntTagConfig config;

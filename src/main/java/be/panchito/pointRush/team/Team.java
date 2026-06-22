@@ -1,7 +1,9 @@
 package be.panchito.pointRush.team;
 
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -23,8 +25,22 @@ public final class Team {
     private final Set<UUID> members = new LinkedHashSet<>();
     private NamedTextColor color;
     private long points;
-    /** Shared team teleport target set via /team sethome; null when unset. */
-    private Location home;
+
+    /**
+     * Shared team teleport target set via /team sethome. Stored as raw world-name + coords (not a
+     * {@link Location}) so the home survives even when its world isn't loaded yet — e.g. a Multiverse
+     * world that loads after the team data, or while an event has the world unloaded. The {@link Location}
+     * is resolved lazily in {@link #getHome()} and never dropped from storage just because the world is
+     * momentarily unavailable.
+     */
+    private String homeWorld;
+    private double homeX;
+    private double homeY;
+    private double homeZ;
+    private float homeYaw;
+    private float homePitch;
+    private boolean hasHome;
+    private Location homeCache;
 
     public Team(UUID id, String name, UUID leader, NamedTextColor color) {
         this.id = id;
@@ -113,11 +129,90 @@ public final class Team {
         this.points = Math.max(0, this.points - amount);
     }
 
+    /** True als er een home is ingesteld, los van of de doelwereld nu geladen is. */
+    public boolean hasHome() {
+        return hasHome;
+    }
+
+    /**
+     * Resolvet de home lui: de wereld kan later geladen zijn (bv. via Multiverse) dan dit team. Geeft
+     * {@code null} als er geen home is of de wereld (nog) niet geladen is — de opgeslagen home blijft
+     * dan wel bewaard.
+     */
     public Location getHome() {
-        return home != null ? home.clone() : null;
+        if (!hasHome || homeWorld == null) {
+            return null;
+        }
+        if (homeCache != null && homeCache.getWorld() != null) {
+            return homeCache.clone();
+        }
+        World world = Bukkit.getWorld(homeWorld);
+        if (world == null) {
+            return null;
+        }
+        homeCache = new Location(world, homeX, homeY, homeZ, homeYaw, homePitch);
+        return homeCache.clone();
     }
 
     public void setHome(Location home) {
-        this.home = home != null ? home.clone() : null;
+        if (home == null || home.getWorld() == null) {
+            clearHome();
+            return;
+        }
+        this.homeWorld = home.getWorld().getName();
+        this.homeX = home.getX();
+        this.homeY = home.getY();
+        this.homeZ = home.getZ();
+        this.homeYaw = home.getYaw();
+        this.homePitch = home.getPitch();
+        this.hasHome = true;
+        this.homeCache = home.clone();
+    }
+
+    /** Herstelt de home uit opslag zonder dat de wereld geladen hoeft te zijn. */
+    public void setHomeRaw(String world, double x, double y, double z, float yaw, float pitch) {
+        if (world == null) {
+            clearHome();
+            return;
+        }
+        this.homeWorld = world;
+        this.homeX = x;
+        this.homeY = y;
+        this.homeZ = z;
+        this.homeYaw = yaw;
+        this.homePitch = pitch;
+        this.hasHome = true;
+        this.homeCache = null;
+    }
+
+    public void clearHome() {
+        this.hasHome = false;
+        this.homeWorld = null;
+        this.homeCache = null;
+    }
+
+    // Raw accessors voor de opslaglaag: persisteer de home ongeacht of de wereld geladen is.
+    public String getHomeWorld() {
+        return homeWorld;
+    }
+
+    public double getHomeX() {
+        return homeX;
+    }
+
+    public double getHomeY() {
+        return homeY;
+    }
+
+    public double getHomeZ() {
+        return homeZ;
+    }
+
+    public float getHomeYaw() {
+        return homeYaw;
+    }
+
+    public float getHomePitch() {
+        return homePitch;
     }
 }

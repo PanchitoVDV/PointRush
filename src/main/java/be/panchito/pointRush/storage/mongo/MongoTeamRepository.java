@@ -10,9 +10,6 @@ import com.mongodb.client.model.Updates;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.World;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,9 +65,11 @@ public final class MongoTeamRepository {
         updates.add(Updates.set("leader", team.getLeader().toString()));
         updates.add(Updates.set("color", team.getColor().toString()));
         updates.add(Updates.set("members", team.getMembers().stream().map(UUID::toString).toList()));
-        Location home = team.getHome();
-        if (home != null && home.getWorld() != null) {
-            updates.add(Updates.set("home", homeDocument(home)));
+        // Schrijf de home uit de raw opslag (niet uit een geresolvde Location) zodat een team-home nooit
+        // verdwijnt enkel omdat de wereld op dit moment niet geladen is. Alleen unsetten als er echt
+        // geen home is ingesteld.
+        if (team.hasHome()) {
+            updates.add(Updates.set("home", homeDocument(team)));
         } else {
             updates.add(Updates.unset("home"));
         }
@@ -125,20 +124,19 @@ public final class MongoTeamRepository {
                 .append("color", team.getColor().toString())
                 .append("points", team.getPoints())
                 .append("members", memberStrings);
-        Location home = team.getHome();
-        if (home != null && home.getWorld() != null) {
-            doc.append("home", homeDocument(home));
+        if (team.hasHome()) {
+            doc.append("home", homeDocument(team));
         }
         return doc;
     }
 
-    private static Document homeDocument(Location home) {
-        return new Document("world", home.getWorld().getName())
-                .append("x", home.getX())
-                .append("y", home.getY())
-                .append("z", home.getZ())
-                .append("yaw", (double) home.getYaw())
-                .append("pitch", (double) home.getPitch());
+    private static Document homeDocument(Team team) {
+        return new Document("world", team.getHomeWorld())
+                .append("x", team.getHomeX())
+                .append("y", team.getHomeY())
+                .append("z", team.getHomeZ())
+                .append("yaw", (double) team.getHomeYaw())
+                .append("pitch", (double) team.getHomePitch());
     }
 
     private static Team fromDocument(Document doc) {
@@ -183,15 +181,16 @@ public final class MongoTeamRepository {
 
         if (doc.get("home") instanceof Document home) {
             String worldName = home.getString("world");
-            World world = worldName != null ? Bukkit.getWorld(worldName) : null;
-            if (world != null) {
-                team.setHome(new Location(
-                        world,
+            if (worldName != null) {
+                // Raw inladen — geen Bukkit.getWorld()-check, zodat een (nog) niet-geladen wereld de
+                // home niet laat verdwijnen. getHome() resolvet de wereld later lui.
+                team.setHomeRaw(
+                        worldName,
                         asDouble(home.get("x")),
                         asDouble(home.get("y")),
                         asDouble(home.get("z")),
                         (float) asDouble(home.get("yaw")),
-                        (float) asDouble(home.get("pitch"))));
+                        (float) asDouble(home.get("pitch")));
             }
         }
         return team;

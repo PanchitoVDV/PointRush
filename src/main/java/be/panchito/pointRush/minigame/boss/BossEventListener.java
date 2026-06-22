@@ -1,12 +1,12 @@
 package be.panchito.pointRush.minigame.boss;
 
-import io.lumine.mythic.bukkit.events.MythicMobDeathEvent;
 import org.bukkit.entity.Entity;
-import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
@@ -24,29 +24,75 @@ public final class BossEventListener implements Listener {
         this.game = game;
     }
 
+    /**
+     * Speler-vs-speler schade gaat volledig uit (co-op boss-fight) en schade aan een actieve boss
+     * wordt per speler bijgehouden voor de MVP-prijs.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDamageByEntity(EntityDamageByEntityEvent event) {
+        Player attacker = resolveAttacker(event);
+
+        if (event.getEntity() instanceof Player victim && game.isParticipant(victim.getUniqueId())) {
+            if (isProtected(victim)) {
+                event.setCancelled(true);
+                return;
+            }
+            // Geen friendly fire: deelnemers kunnen elkaar niet raken.
+            if (attacker != null && game.isParticipant(attacker.getUniqueId())
+                    && !attacker.getUniqueId().equals(victim.getUniqueId())) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
+        if (game.getState() == BossEventGame.State.RUNNING
+                && attacker != null && game.isParticipant(attacker.getUniqueId())
+                && game.isActiveBoss(event.getEntity().getUniqueId())) {
+            game.addBossDamage(attacker, event.getFinalDamage());
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
+        if (event instanceof EntityDamageByEntityEvent) {
+            return;
+        }
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
         if (!game.isParticipant(player.getUniqueId())) {
             return;
         }
-        if (game.getState() != BossEventGame.State.RUNNING) {
+        if (isProtected(player)) {
             event.setCancelled(true);
-            return;
+        }
+    }
+
+    private Player resolveAttacker(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player p) {
+            return p;
+        }
+        if (event.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof Player p) {
+            return p;
+        }
+        return null;
+    }
+
+    /** True wanneer de speler géén actieve vechter is en dus geen schade hoort te krijgen. */
+    private boolean isProtected(Player player) {
+        if (game.getState() != BossEventGame.State.RUNNING) {
+            return true;
         }
         BossEventPlayerState ps = game.getPlayerState(player.getUniqueId());
         if (ps == null) {
-            return;
+            return true;
         }
-        BossEventGame.Phase phase = game.getPhase();
-        if (phase == BossEventGame.Phase.ARENA_ROUND && !ps.isArenaAlive()) {
-            event.setCancelled(true);
-        } else if ((phase == BossEventGame.Phase.FINAL_ROUND || phase == BossEventGame.Phase.FINAL_COUNTDOWN)
-                && !ps.isFinalAlive()) {
-            event.setCancelled(true);
-        }
+        return switch (game.getPhase()) {
+            case ARENA_ROUND -> !ps.isArenaAlive();
+            case FINAL_ROUND, FINAL_COUNTDOWN -> !ps.isFinalAlive();
+            default -> true;
+        };
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -94,18 +140,6 @@ public final class BossEventListener implements Listener {
         }
         Entity entity = event.getEntity();
         game.handleBossDeath(entity.getUniqueId());
-    }
-
-    /** MythicMobs bosses trigger this instead of (or before) Bukkit EntityDeathEvent. */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onMythicMobDeath(MythicMobDeathEvent event) {
-        if (game.getState() != BossEventGame.State.RUNNING) {
-            return;
-        }
-        Entity entity = event.getEntity();
-        if (entity != null) {
-            game.handleBossDeath(entity.getUniqueId());
-        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

@@ -16,39 +16,58 @@ import org.bukkit.scoreboard.Score;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Per-player sidebar + shared boss bar voor Boss Event.
+ * Per-player sidebar + boss bars voor Boss Event.
+ * Tijdens arena-rondes ziet elke speler de live HP-bar van zijn eigen arena-boss;
+ * in countdowns/pauze/finaal een gedeelde info-bar.
  */
 public final class BossEventScoreboard {
 
     private static final String OBJ_KEY = "pr_bossevent";
 
     private static final String[] LINE_IDS = {
-            "\u00A70", "\u00A71", "\u00A72", "\u00A73",
-            "\u00A74", "\u00A75", "\u00A76", "\u00A77",
-            "\u00A78", "\u00A79", "\u00A7a", "\u00A7b"
+            "§0", "§1", "§2", "§3",
+            "§4", "§5", "§6", "§7",
+            "§8", "§9", "§a", "§b"
     };
 
     private final be.panchito.pointRush.PointRush plugin;
     private final BossEventGame game;
 
     private final Map<UUID, Scoreboard> boards = new HashMap<>();
-    private final BossBar bossBar;
+    private final BossBar infoBar;
+    private final Map<String, BossBar> arenaBars = new LinkedHashMap<>();
+    private final Map<UUID, BossBar> shownBar = new HashMap<>();
     private BukkitTask updateTask;
 
     public BossEventScoreboard(be.panchito.pointRush.PointRush plugin, BossEventGame game) {
         this.plugin = plugin;
         this.game = game;
-        this.bossBar = BossBar.bossBar(
+        this.infoBar = BossBar.bossBar(
                 Component.text(SmallText.of("wachten..."), NamedTextColor.GRAY),
                 1.0f,
                 BossBar.Color.RED,
                 BossBar.Overlay.NOTCHED_10
         );
+    }
+
+    /** Maak één live HP-bar per actieve arena aan (bij event-start). */
+    public void initArenaBars(Collection<String> arenaIds) {
+        clearArenaBars();
+        for (String id : arenaIds) {
+            arenaBars.put(id, BossBar.bossBar(
+                    Component.text(SmallText.of("boss"), NamedTextColor.WHITE),
+                    1.0f,
+                    BossBar.Color.RED,
+                    BossBar.Overlay.NOTCHED_20));
+        }
     }
 
     public void attach(Player player) {
@@ -76,12 +95,16 @@ public final class BossEventScoreboard {
 
         boards.put(player.getUniqueId(), board);
         player.setScoreboard(board);
-        player.showBossBar(bossBar);
+        applyBossBar(player);
     }
 
     public void detach(Player player) {
         boards.remove(player.getUniqueId());
-        player.hideBossBar(bossBar);
+        shownBar.remove(player.getUniqueId());
+        player.hideBossBar(infoBar);
+        for (BossBar bar : arenaBars.values()) {
+            player.hideBossBar(bar);
+        }
         ScoreboardManager mgr = Bukkit.getScoreboardManager();
         if (mgr != null) {
             player.setScoreboard(mgr.getMainScoreboard());
@@ -110,12 +133,42 @@ public final class BossEventScoreboard {
             }
         }
         boards.clear();
+        shownBar.clear();
+        arenaBars.clear();
     }
 
-    public void updateBossBar(String text, float progress, BossBar.Color color) {
-        bossBar.name(Component.text(SmallText.of(text), NamedTextColor.WHITE));
-        bossBar.progress(Math.max(0f, Math.min(1f, progress)));
-        bossBar.color(color);
+    /** Gedeelde info-bar (countdown / pauze / finaal). */
+    public void updateInfoBar(String text, float progress, BossBar.Color color) {
+        infoBar.name(Component.text(SmallText.of(text), NamedTextColor.WHITE));
+        infoBar.progress(clamp(progress));
+        infoBar.color(color);
+    }
+
+    /** Live boss-HP-bar voor één specifieke arena. */
+    public void updateArenaBar(String arenaId, String text, float progress, BossBar.Color color) {
+        BossBar bar = arenaBars.get(arenaId);
+        if (bar == null) {
+            return;
+        }
+        bar.name(Component.text(SmallText.of(text), NamedTextColor.WHITE));
+        bar.progress(clamp(progress));
+        bar.color(color);
+    }
+
+    private void clearArenaBars() {
+        for (BossBar bar : arenaBars.values()) {
+            for (UUID id : new ArrayList<>(boards.keySet())) {
+                Player p = Bukkit.getPlayer(id);
+                if (p != null) {
+                    p.hideBossBar(bar);
+                }
+            }
+        }
+        arenaBars.clear();
+    }
+
+    private float clamp(float progress) {
+        return Math.max(0f, Math.min(1f, progress));
     }
 
     private void refreshAll() {
@@ -125,7 +178,37 @@ public final class BossEventScoreboard {
                 continue;
             }
             refresh(player, entry.getValue());
+            applyBossBar(player);
         }
+    }
+
+    /** Toon de speler de juiste bar voor de huidige fase (arena-HP of gedeelde info). */
+    private void applyBossBar(Player player) {
+        BossBar target = targetBar(player);
+        BossBar current = shownBar.get(player.getUniqueId());
+        if (current == target) {
+            return;
+        }
+        if (current != null) {
+            player.hideBossBar(current);
+        }
+        if (target != null) {
+            player.showBossBar(target);
+        }
+        shownBar.put(player.getUniqueId(), target);
+    }
+
+    private BossBar targetBar(Player player) {
+        if (game.getPhase() == BossEventGame.Phase.ARENA_ROUND) {
+            BossEventPlayerState ps = game.getPlayerState(player.getUniqueId());
+            if (ps != null && ps.getArenaId() != null) {
+                BossBar bar = arenaBars.get(ps.getArenaId());
+                if (bar != null) {
+                    return bar;
+                }
+            }
+        }
+        return infoBar;
     }
 
     private void refresh(Player player, Scoreboard board) {
@@ -149,22 +232,26 @@ public final class BossEventScoreboard {
             default -> "-";
         };
 
-        String status = ps.isSpectatingInPhase(phase) ? "uitgeschakeld" : "actief";
+        boolean eliminated;
         if (phase == BossEventGame.Phase.FINAL_ROUND || phase == BossEventGame.Phase.FINAL_COUNTDOWN) {
-            status = ps.isFinalAlive() ? "actief" : "uitgeschakeld";
+            eliminated = !ps.isFinalAlive();
+        } else {
+            eliminated = ps.isSpectatingInPhase(phase);
         }
+        String status = eliminated ? "uitgeschakeld" : "actief";
 
         setLine(obj, 0, Component.text(SmallText.of("fase: " + phaseLabel), NamedTextColor.GRAY));
         setLine(obj, 1, Component.text(SmallText.of("arena: " + (ps.getArenaId() != null ? ps.getArenaId() : "-")),
                 NamedTextColor.AQUA));
         setLine(obj, 2, Component.text(SmallText.of("status: " + status),
-                ps.isSpectatingInPhase(phase) ? NamedTextColor.RED : NamedTextColor.GREEN));
+                eliminated ? NamedTextColor.RED : NamedTextColor.GREEN));
         setLine(obj, 3, Component.text(SmallText.of("tijd: " + game.formatTime(game.getPhaseTimeLeftMs())),
                 NamedTextColor.YELLOW));
         setLine(obj, 4, Component.empty());
         setLine(obj, 5, Component.text(SmallText.of("punten: " + ps.getPointsEarned()), NamedTextColor.GOLD));
+        setLine(obj, 6, Component.text(SmallText.of("schade: " + (long) ps.getBossDamage()), NamedTextColor.LIGHT_PURPLE));
 
-        for (int i = 6; i < LINE_IDS.length; i++) {
+        for (int i = 7; i < LINE_IDS.length; i++) {
             setLine(obj, i, Component.empty());
         }
     }

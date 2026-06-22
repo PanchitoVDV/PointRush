@@ -5,7 +5,10 @@ import be.panchito.pointRush.minigame.bingo.BingoGame;
 import be.panchito.pointRush.minigame.boatrace.BoatRaceGame;
 import be.panchito.pointRush.minigame.boss.BossEventGame;
 import be.panchito.pointRush.minigame.ctf.CtfGame;
+import be.panchito.pointRush.minigame.dropper.DropperGame;
+import be.panchito.pointRush.minigame.finale.FinaleGame;
 import be.panchito.pointRush.minigame.floorislava.FloorIsLavaGame;
+import be.panchito.pointRush.minigame.football.FootballGame;
 import be.panchito.pointRush.minigame.goldrush.GoldRushGame;
 import be.panchito.pointRush.minigame.hiddentarget.HiddenTargetGame;
 import be.panchito.pointRush.minigame.holdthecrown.HoldTheCrownGame;
@@ -36,6 +39,7 @@ public final class MinigameRegistry {
         EVENTS.put("parkour", "Parkour");
         EVENTS.put("tnttag", "TNT Tag");
         EVENTS.put("tntrun", "TNT Run");
+        EVENTS.put("dropper", "Dropper");
         EVENTS.put("race", "Race");
         EVENTS.put("boatrace", "Bootrace");
         EVENTS.put("bingo", "Bingo");
@@ -47,6 +51,8 @@ public final class MinigameRegistry {
         EVENTS.put("ctf", "Capture the Flag");
         EVENTS.put("holdthecrown", "Hold the Crown");
         EVENTS.put("bossevent", "Boss Event");
+        EVENTS.put("football", "Voetbal");
+        EVENTS.put("finale", "Finale");
 
     }
 
@@ -82,6 +88,7 @@ public final class MinigameRegistry {
         return isActive(plugin.getParkourGame(), ParkourGame.State.IDLE)
                 || isActive(plugin.getTntTagGame(), TntTagGame.State.IDLE)
                 || isActive(plugin.getTntRunGame(), TntRunGame.State.IDLE)
+                || isActive(plugin.getDropperGame(), DropperGame.State.IDLE)
                 || isActive(plugin.getRaceGame(), RaceGame.State.IDLE)
                 || isActive(plugin.getBoatRaceGame(), BoatRaceGame.State.IDLE)
                 || isActive(plugin.getBingoGame(), BingoGame.State.IDLE)
@@ -92,7 +99,9 @@ public final class MinigameRegistry {
                 || isActive(plugin.getHiddenTargetGame(), HiddenTargetGame.State.IDLE)
                 || isActive(plugin.getCtfGame(), CtfGame.State.IDLE)
                 || isActive(plugin.getHoldTheCrownGame(), HoldTheCrownGame.State.IDLE)
-                || isActive(plugin.getBossEventGame(), BossEventGame.State.IDLE);
+                || isActive(plugin.getBossEventGame(), BossEventGame.State.IDLE)
+                || isActive(plugin.getFootballGame(), FootballGame.State.IDLE)
+                || isActive(plugin.getFinaleGame(), FinaleGame.State.IDLE);
     }
 
     /**
@@ -102,6 +111,7 @@ public final class MinigameRegistry {
         if (isActive(plugin.getParkourGame(), ParkourGame.State.IDLE)) return "parkour";
         if (isActive(plugin.getTntTagGame(), TntTagGame.State.IDLE)) return "tnttag";
         if (isActive(plugin.getTntRunGame(), TntRunGame.State.IDLE)) return "tntrun";
+        if (isActive(plugin.getDropperGame(), DropperGame.State.IDLE)) return "dropper";
         if (isActive(plugin.getRaceGame(), RaceGame.State.IDLE)) return "race";
         if (isActive(plugin.getBoatRaceGame(), BoatRaceGame.State.IDLE)) return "boatrace";
         if (isActive(plugin.getBingoGame(), BingoGame.State.IDLE)) return "bingo";
@@ -113,6 +123,8 @@ public final class MinigameRegistry {
         if (isActive(plugin.getCtfGame(), CtfGame.State.IDLE)) return "ctf";
         if (isActive(plugin.getHoldTheCrownGame(), HoldTheCrownGame.State.IDLE)) return "holdthecrown";
         if (isActive(plugin.getBossEventGame(), BossEventGame.State.IDLE)) return "bossevent";
+        if (isActive(plugin.getFootballGame(), FootballGame.State.IDLE)) return "football";
+        if (isActive(plugin.getFinaleGame(), FinaleGame.State.IDLE)) return "finale";
         return null;
     }
 
@@ -128,6 +140,7 @@ public final class MinigameRegistry {
         return participant(plugin.getParkourGame(), playerId)
                 || participant(plugin.getTntTagGame(), playerId)
                 || participant(plugin.getTntRunGame(), playerId)
+                || participant(plugin.getDropperGame(), playerId)
                 || participant(plugin.getRaceGame(), playerId)
                 || participant(plugin.getBoatRaceGame(), playerId)
                 || participant(plugin.getBingoGame(), playerId)
@@ -136,7 +149,9 @@ public final class MinigameRegistry {
                 || participant(plugin.getHiddenTargetGame(), playerId)
                 || participant(plugin.getCtfGame(), playerId)
                 || participant(plugin.getHoldTheCrownGame(), playerId)
-                || participant(plugin.getBossEventGame(), playerId);
+                || participant(plugin.getBossEventGame(), playerId)
+                || participant(plugin.getFootballGame(), playerId)
+                || participant(plugin.getFinaleGame(), playerId);
     }
 
     /**
@@ -153,6 +168,9 @@ public final class MinigameRegistry {
         list.add(candidate("tntrun", plugin.getTntRunConfig().isReady(),
                 () -> plugin.getTntRunGame().getState() == TntRunGame.State.IDLE,
                 () -> plugin.getTntRunGame().start()));
+        list.add(candidate("dropper", plugin.getDropperConfig().isReady(),
+                () -> plugin.getDropperGame().getState() == DropperGame.State.IDLE,
+                () -> plugin.getDropperGame().start()));
         list.add(candidate("race", plugin.getRaceConfig().isReady(),
                 () -> plugin.getRaceGame().getState() == RaceGame.State.IDLE,
                 () -> plugin.getRaceGame().start()));
@@ -186,6 +204,12 @@ public final class MinigameRegistry {
         list.add(candidate("bossevent", plugin.getBossEventConfig().isReady(),
                 () -> plugin.getBossEventGame().getState() == BossEventGame.State.IDLE,
                 () -> plugin.getBossEventGame().start()));
+        list.add(candidate("football", plugin.getFootballConfig().isReady(),
+                () -> plugin.getFootballGame().getState() == FootballGame.State.IDLE,
+                () -> plugin.getFootballGame().start()));
+        list.add(candidate("finale", plugin.getFinaleConfig().isReady(),
+                () -> plugin.getFinaleGame().getState() == FinaleGame.State.IDLE,
+                () -> plugin.getFinaleGame().start()));
         return list;
     }
 
@@ -227,6 +251,7 @@ public final class MinigameRegistry {
             case ParkourGame g -> g.getState();
             case TntTagGame g -> g.getState();
             case TntRunGame g -> g.getState();
+            case DropperGame g -> g.getState();
             case RaceGame g -> g.getState();
             case BoatRaceGame g -> g.getState();
             case BingoGame g -> g.getState();
@@ -238,6 +263,8 @@ public final class MinigameRegistry {
             case CtfGame g -> g.getState();
             case HoldTheCrownGame g -> g.getState();
             case BossEventGame g -> g.getState();
+            case FootballGame g -> g.getState();
+            case FinaleGame g -> g.getState();
             default -> null;
         };
         return state != idleState;
@@ -249,6 +276,7 @@ public final class MinigameRegistry {
             case ParkourGame g -> g.isParticipant(playerId);
             case TntTagGame g -> g.isParticipant(playerId);
             case TntRunGame g -> g.isParticipant(playerId);
+            case DropperGame g -> g.isParticipant(playerId);
             case RaceGame g -> g.isParticipant(playerId);
             case BoatRaceGame g -> g.isParticipant(playerId);
             case BingoGame g -> g.isParticipant(playerId);
@@ -258,6 +286,8 @@ public final class MinigameRegistry {
             case CtfGame g -> g.isParticipant(playerId);
             case HoldTheCrownGame g -> g.isParticipant(playerId);
             case BossEventGame g -> g.isParticipant(playerId);
+            case FootballGame g -> g.isParticipant(playerId);
+            case FinaleGame g -> g.isParticipant(playerId);
             default -> false;
         };
     }

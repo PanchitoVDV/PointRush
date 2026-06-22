@@ -27,6 +27,7 @@ public final class BossEventConfig {
     public static final int DEFAULT_SURVIVOR_POINTS = 100;
     public static final int DEFAULT_FINAL_BONUS_POINTS = 50;
     public static final int DEFAULT_FINAL_CONSOLATION_POINTS = 25;
+    public static final int DEFAULT_MVP_POINTS = 75;
 
     private static final String KEY = "bossevent";
 
@@ -46,6 +47,7 @@ public final class BossEventConfig {
     private int survivorPoints = DEFAULT_SURVIVOR_POINTS;
     private int finalBonusPoints = DEFAULT_FINAL_BONUS_POINTS;
     private int finalConsolationPoints = DEFAULT_FINAL_CONSOLATION_POINTS;
+    private int mvpPoints = DEFAULT_MVP_POINTS;
 
     public BossEventConfig(JavaPlugin plugin, UnifiedSettings unified, MythicMobsBridge mythic) {
         this.plugin = plugin;
@@ -65,6 +67,7 @@ public final class BossEventConfig {
         survivorPoints = DEFAULT_SURVIVOR_POINTS;
         finalBonusPoints = DEFAULT_FINAL_BONUS_POINTS;
         finalConsolationPoints = DEFAULT_FINAL_CONSOLATION_POINTS;
+        mvpPoints = DEFAULT_MVP_POINTS;
 
         YamlConfiguration cfg = unified.yaml();
         if (cfg.getConfigurationSection(KEY) == null) {
@@ -91,6 +94,9 @@ public final class BossEventConfig {
         }
         if (cfg.isSet(KEY + ".finalConsolationPoints")) {
             finalConsolationPoints = Math.max(0, cfg.getInt(KEY + ".finalConsolationPoints"));
+        }
+        if (cfg.isSet(KEY + ".mvpPoints")) {
+            mvpPoints = Math.max(0, cfg.getInt(KEY + ".mvpPoints"));
         }
 
         ConfigurationSection arenaSec = cfg.getConfigurationSection(KEY + ".arenas");
@@ -121,6 +127,7 @@ public final class BossEventConfig {
         cfg.set(KEY + ".survivorPoints", survivorPoints);
         cfg.set(KEY + ".finalBonusPoints", finalBonusPoints);
         cfg.set(KEY + ".finalConsolationPoints", finalConsolationPoints);
+        cfg.set(KEY + ".mvpPoints", mvpPoints);
 
         cfg.set(KEY + ".arenas", null);
         for (BossEventArenaConfig arena : arenas.values()) {
@@ -280,6 +287,11 @@ public final class BossEventConfig {
         return arenaRounds;
     }
 
+    public void setArenaRounds(int arenaRounds) {
+        this.arenaRounds = Math.max(1, Math.min(3, arenaRounds));
+        save();
+    }
+
     public int getRoundTimeoutMinutes() {
         return roundTimeoutMinutes;
     }
@@ -330,6 +342,15 @@ public final class BossEventConfig {
 
     public void setFinalConsolationPoints(int finalConsolationPoints) {
         this.finalConsolationPoints = Math.max(0, finalConsolationPoints);
+        save();
+    }
+
+    public int getMvpPoints() {
+        return mvpPoints;
+    }
+
+    public void setMvpPoints(int mvpPoints) {
+        this.mvpPoints = Math.max(0, mvpPoints);
         save();
     }
 

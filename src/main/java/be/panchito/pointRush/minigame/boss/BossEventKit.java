@@ -44,7 +44,7 @@ public final class BossEventKit {
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
         });
 
-        ItemStack totem = new ItemStack(Material.TOTEM_OF_UNDYING);
+        ItemStack totem = new ItemStack(Material.TOTEM_OF_UNDYING, 5);
         totem.editMeta(meta -> meta.displayName(
                 Component.text(SmallText.of("Boss totem"), NamedTextColor.YELLOW, TextDecoration.BOLD)));
 
@@ -61,6 +61,11 @@ public final class BossEventKit {
         player.setSaturation(20f);
         player.setFireTicks(0);
         player.setFallDistance(0f);
+
+        // Forceer een inventory-resync: armor die in dezelfde tick als een (cross-world)
+        // teleport wordt aangetrokken rendert anders soms niet ("ghost armor") tot de speler
+        // beweegt of relogt.
+        player.updateInventory();
     }
 
     private static ItemStack enchantedArmor(Material material) {
