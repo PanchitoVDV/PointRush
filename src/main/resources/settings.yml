@@ -123,6 +123,15 @@ holdthecrown:
   durationMinutes: 30
   pickupRadius: 3.0
 
+# Voetbal-event: PointRush-laag bovenop een BlockBall-arena. Maak de arena (veld, doelen,
+# spawns, bal) volledig in BlockBall via /blockball en vul hier de arena-naam in.
+# Tip: zet de match-duur van de BlockBall-arena hoog/uit, want PointRush bewaakt de tijd hier.
+football:
+  arena: ''
+  durationMinutes: 5
+  pointsPerGoal: 50
+  winBonus: 150
+
 bossevent:
   playersPerArena: 20
   arenaRounds: 3
@@ -131,6 +140,7 @@ bossevent:
   survivorPoints: 100
   finalBonusPoints: 50
   finalConsolationPoints: 25
+  mvpPoints: 75
   arenas: {}
   final: {}
 

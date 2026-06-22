@@ -252,6 +252,7 @@ public final class AdminEventMenu {
         return switch (type) {
             case "parkour" -> Material.FEATHER;
             case "tnttag", "tntrun" -> Material.TNT;
+            case "dropper" -> Material.WATER_BUCKET;
             case "race" -> Material.MINECART;
             case "boatrace" -> Material.OAK_BOAT;
             case "bingo" -> Material.FILLED_MAP;
@@ -263,6 +264,8 @@ public final class AdminEventMenu {
             case "ctf" -> Material.WHITE_BANNER;
             case "holdthecrown" -> Material.GOLDEN_APPLE;
             case "bossevent" -> Material.DRAGON_HEAD;
+            case "football" -> Material.SLIME_BALL;
+            case "finale" -> Material.NETHER_STAR;
             default -> Material.PAPER;
         };
     }

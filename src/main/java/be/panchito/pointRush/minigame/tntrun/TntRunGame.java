@@ -66,8 +66,14 @@ public final class TntRunGame {
 
     public enum State { IDLE, STARTING, RUNNING }
 
-    /** Points awarded for placements 1..10 (same scale as parkour). */
-    public static final int[] PLACEMENT_POINTS = { 100, 80, 60, 50, 40, 30, 25, 20, 15, 10 };
+    /**
+     * Punten voor uitschakel-plaatsen 1..10 — bewust de helft van de parkour-schaal, zodat de
+     * opstapelende deelname-punten in verhouding blijven met de andere events.
+     */
+    public static final int[] PLACEMENT_POINTS = { 50, 40, 30, 25, 20, 15, 12, 10, 8, 5 };
+
+    /** Win-bonus voor het laatste team — één keer per team (niet per overlevend lid), ~100 zoals de andere events. */
+    public static final int WIN_TEAM_BONUS = 100;
 
     public static final int COUNTDOWN_SECONDS = 10;
     /** Hard cap so an event never hangs forever (15 min). */
@@ -468,14 +474,22 @@ public final class TntRunGame {
         }
 
         // assign placement #1 to every surviving player (ties at the top)
+        Set<UUID> winningTeams = new HashSet<>();
         for (UUID id : alive) {
             TntRunPlayerState ps = players.get(id);
             if (ps == null) continue;
             ps.setPlacement(1);
-            int pts = pointsForPlacement(1);
             Team team = teamManager.getTeamOfPlayer(id);
-            if (team != null && pts > 0) {
-                dataManager.addTeamPoints(team, pts);
+            if (team != null) {
+                winningTeams.add(team.getId());
+            }
+        }
+        // Win-bonus één keer per winnend team (niet per overlevend lid), zodat de win in verhouding
+        // blijft met de andere events.
+        for (UUID teamId : winningTeams) {
+            Team team = teamManager.getTeam(teamId);
+            if (team != null) {
+                dataManager.addTeamPoints(team, WIN_TEAM_BONUS);
             }
         }
 
@@ -565,7 +579,8 @@ public final class TntRunGame {
                     team != null ? team.getId() : null,
                     team != null ? team.getName() : null,
                     team != null ? team.getColor().toString() : null,
-                    pointsForPlacement(ps.getPlacement()),
+                    // Overlevenden (winnaars) krijgen de team-win-bonus; uitgeschakelden hun placement-punten.
+                    ps.isAlive() ? WIN_TEAM_BONUS : pointsForPlacement(ps.getPlacement()),
                     detail
             ));
         }

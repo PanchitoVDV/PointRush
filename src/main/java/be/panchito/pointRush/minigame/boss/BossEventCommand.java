@@ -31,8 +31,8 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
             "addarena", "removearena", "listarenas",
             "setarenaspawn", "setarenabossspawn", "setarenaboss",
             "setfinalspawn", "setfinalbossspawn", "setfinalboss",
-            "setplayersperarena", "setroundtimeout", "setintermission",
-            "setsurvivorpoints", "setfinalbonus", "setfinalconsolation"
+            "setplayersperarena", "setarenarounds", "setroundtimeout", "setintermission",
+            "setsurvivorpoints", "setfinalbonus", "setfinalconsolation", "setmvp"
     );
 
     private final BossEventGame game;
@@ -84,11 +84,13 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
             case "setfinalbossspawn" -> handleSetFinalBossSpawn(sender);
             case "setfinalboss" -> handleSetFinalBoss(sender, args);
             case "setplayersperarena" -> handleSetInt(sender, args, config::setPlayersPerArena, "spelers per arena");
+            case "setarenarounds" -> handleSetInt(sender, args, config::setArenaRounds, "arena-rondes (1-3)");
             case "setroundtimeout" -> handleSetInt(sender, args, config::setRoundTimeoutMinutes, "ronde timeout (min)");
             case "setintermission" -> handleSetInt(sender, args, config::setIntermissionSeconds, "pauze (sec)");
             case "setsurvivorpoints" -> handleSetInt(sender, args, config::setSurvivorPoints, "arena-overlever punten");
             case "setfinalbonus" -> handleSetInt(sender, args, config::setFinalBonusPoints, "finaal bonus");
             case "setfinalconsolation" -> handleSetInt(sender, args, config::setFinalConsolationPoints, "finaal troostprijs");
+            case "setmvp" -> handleSetInt(sender, args, config::setMvpPoints, "MVP punten");
             default -> sendHelp(sender);
         }
         return true;
@@ -110,11 +112,13 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(line("/bossevent setfinalbossspawn", "Finaal boss-spawn"));
             sender.sendMessage(line("/bossevent setfinalboss <MythicMob>", "Finaal boss"));
             sender.sendMessage(line("/bossevent setplayersperarena <n>", "Max spelers per arena (default 20)"));
+            sender.sendMessage(line("/bossevent setarenarounds <1-3>", "Aantal arena-rondes"));
             sender.sendMessage(line("/bossevent setroundtimeout <min>", "Timeout per ronde"));
             sender.sendMessage(line("/bossevent setintermission <sec>", "Pauze tussen rondes"));
-            sender.sendMessage(line("/bossevent setsurvivorpoints <pts>", "Punten na 3 rondes"));
+            sender.sendMessage(line("/bossevent setsurvivorpoints <pts>", "Punten na alle rondes"));
             sender.sendMessage(line("/bossevent setfinalbonus <pts>", "Bonus finaal (arena-overlevers)"));
             sender.sendMessage(line("/bossevent setfinalconsolation <pts>", "Troostprijs finaal"));
+            sender.sendMessage(line("/bossevent setmvp <pts>", "Bonus voor meeste boss-schade"));
             sender.sendMessage(line("/bossevent start", "Start het event"));
             sender.sendMessage(line("/bossevent stop", "Stop het event"));
             sender.sendMessage(line("/bossevent reload", "Herlaad config"));
@@ -144,9 +148,11 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Messages.info("Overlever punten: " + config.getSurvivorPoints()));
         sender.sendMessage(Messages.info("Finaal bonus: " + config.getFinalBonusPoints()));
         sender.sendMessage(Messages.info("Finaal troost: " + config.getFinalConsolationPoints()));
+        sender.sendMessage(Messages.info("MVP punten: " + config.getMvpPoints()));
         sender.sendMessage(Messages.info("Arenas: " + config.getArenas().size()));
+        int rounds = config.getArenaRounds();
         for (BossEventArenaConfig arena : config.getArenas()) {
-            sender.sendMessage(Messages.info("  · " + arena.getId() + " ready=" + arena.isReady()
+            sender.sendMessage(Messages.info("  · " + arena.getId() + " ready=" + arena.isReadyFor(rounds)
                     + " bosses=[" + arena.getRoundBoss(1) + ", "
                     + arena.getRoundBoss(2) + ", " + arena.getRoundBoss(3) + "]"));
         }
@@ -265,8 +271,9 @@ public final class BossEventCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Messages.info("Geen arenas geconfigureerd."));
             return;
         }
+        int rounds = config.getArenaRounds();
         for (BossEventArenaConfig arena : config.getArenas()) {
-            sender.sendMessage(Messages.info(arena.getId() + " — ready=" + arena.isReady()));
+            sender.sendMessage(Messages.info(arena.getId() + " — ready=" + arena.isReadyFor(rounds)));
         }
     }
 

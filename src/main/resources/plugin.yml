@@ -10,7 +10,7 @@ authors: [ Panchito ]
 description: Plugin van cloudito.cloud
 website: cloudito.cloud
 depend: [ MTVehicles, Nexo ]
-softdepend: [ MythicMobs, PlaceholderAPI, UltimateUI, Multiverse-Core ]
+softdepend: [ MythicMobs, PlaceholderAPI, UltimateUI, Multiverse-Core, BlockBall ]
 
 commands:
   team:
@@ -33,6 +33,14 @@ commands:
     description: PointRush TNT Run minigame.
     usage: /tntrun help
     aliases: [ tr, run ]
+  dropper:
+    description: PointRush Dropper minigame (rondes, val correct in het water).
+    usage: /dropper help
+    aliases: [ dr, drop ]
+  finale:
+    description: PointRush Finale — random spawns, kit, freeze-start, laatste overlevende wint.
+    usage: /finale help
+    aliases: [ fin, finals ]
   race:
     description: PointRush Race minigame (autorace met MTVehicles).
     usage: /race help
@@ -77,6 +85,10 @@ commands:
     description: Boss Event — MythicMobs arena-rondes + finaalronde.
     usage: /bossevent help
     aliases: [ boss, be ]
+  pointball:
+    description: Voetbal — rood vs blauw op een BlockBall-arena.
+    usage: /pointball help
+    aliases: [ voetbal, soccer, pb ]
   randomevent:
     description: Draai het random event-rad en kies morgen's minigame.
     usage: /randomevent
@@ -109,6 +121,10 @@ commands:
     description: Schakel de Nether en de End in of uit.
     usage: /dimension <nether|end> <aan|uit>
     aliases: [ dim, dimensions ]
+  camper:
+    description: Markeer een camper - glow + locatie in de chat.
+    usage: /camper <speler> [seconden]
+    aliases: [ exposecamper, nocamp ]
 
 permissions:
   pointrush.team.use:
@@ -137,6 +153,18 @@ permissions:
     default: true
   pointrush.tntrun.admin:
     description: Mag de TNT Run setup beheren en events starten/stoppen.
+    default: op
+  pointrush.dropper.use:
+    description: Toegang tot het /dropper info en /dropper leave commando.
+    default: true
+  pointrush.dropper.admin:
+    description: Mag de Dropper setup beheren en events starten/stoppen.
+    default: op
+  pointrush.finale.use:
+    description: Toegang tot /finale info en /finale leave.
+    default: true
+  pointrush.finale.admin:
+    description: Mag de Finale setup beheren en events starten/stoppen.
     default: op
   pointrush.race.use:
     description: Toegang tot het /race info en /race leave commando.
@@ -204,6 +232,12 @@ permissions:
   pointrush.bossevent.admin:
     description: Mag Boss Event setup beheren en events starten/stoppen.
     default: op
+  pointrush.football.use:
+    description: Toegang tot /pointball info en /pointball leave.
+    default: true
+  pointrush.football.admin:
+    description: Mag Voetbal setup beheren en events starten/stoppen.
+    default: op
   pointrush.randomevent.admin:
     description: Mag /randomevent gebruiken om morgen's minigame te kiezen.
     default: op
@@ -231,6 +265,9 @@ permissions:
   pointrush.dimension.admin:
     description: Mag de Nether en de End in-/uitschakelen (/dimension).
     default: op
+  pointrush.camper:
+    description: Mag een speler als camper markeren (/camper).
+    default: op
   pointrush.spectator.bypass:
     description: Wordt buiten events niet automatisch uit spectator gehaald (staff).
     default: op
@@ -247,6 +284,10 @@ permissions:
       pointrush.tnttag.admin: true
       pointrush.tntrun.use: true
       pointrush.tntrun.admin: true
+      pointrush.dropper.use: true
+      pointrush.dropper.admin: true
+      pointrush.finale.use: true
+      pointrush.finale.admin: true
       pointrush.race.use: true
       pointrush.race.admin: true
       pointrush.boatrace.use: true
@@ -269,6 +310,8 @@ permissions:
       pointrush.holdthecrown.admin: true
       pointrush.bossevent.use: true
       pointrush.bossevent.admin: true
+      pointrush.football.use: true
+      pointrush.football.admin: true
       pointrush.randomevent.admin: true
       pointrush.event.admin: true
       pointrush.use: true
@@ -277,4 +320,5 @@ permissions:
       pointrush.shop.use: true
       pointrush.streamer: true
       pointrush.dimension.admin: true
+      pointrush.camper: true
       pointrush.spectator.bypass: true

@@ -58,11 +58,21 @@ public final class BossEventArenaConfig {
     }
 
     public boolean isReady() {
-        return playerSpawn != null
-                && bossSpawn != null
-                && getRoundBoss(1) != null
-                && getRoundBoss(2) != null
-                && getRoundBoss(3) != null;
+        return isReadyFor(roundBosses.length);
+    }
+
+    /** Klaar voor {@code rounds} arena-rondes (spawns gezet + boss per ronde gevuld). */
+    public boolean isReadyFor(int rounds) {
+        if (playerSpawn == null || bossSpawn == null) {
+            return false;
+        }
+        int needed = Math.max(1, Math.min(roundBosses.length, rounds));
+        for (int round = 1; round <= needed; round++) {
+            if (getRoundBoss(round) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

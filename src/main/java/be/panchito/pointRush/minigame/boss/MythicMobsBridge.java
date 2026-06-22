@@ -4,7 +4,9 @@ import io.lumine.mythic.bukkit.MythicBukkit;
 import io.lumine.mythic.core.mobs.ActiveMob;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -132,6 +134,26 @@ public final class MythicMobsBridge implements Listener {
                     }
                 })
                 .orElse(false);
+    }
+
+    /**
+     * Boss-HP als fractie tussen 0 en 1, of {@code -1} als de entity onbekend/dood is.
+     * Gebruikt voor de live boss-health-bar.
+     */
+    public double getBossHealthFraction(UUID entityId) {
+        if (entityId == null) {
+            return -1;
+        }
+        Entity entity = Bukkit.getEntity(entityId);
+        if (!(entity instanceof LivingEntity living) || living.isDead() || !living.isValid()) {
+            return -1;
+        }
+        var attr = living.getAttribute(Attribute.MAX_HEALTH);
+        double max = attr != null ? attr.getValue() : living.getHealth();
+        if (max <= 0) {
+            return -1;
+        }
+        return Math.max(0.0, Math.min(1.0, living.getHealth() / max));
     }
 
     /** True when the spawned boss entity is gone or no longer alive (Mythic cleanup). */
